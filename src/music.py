@@ -144,3 +144,8 @@ def get_music_sound() -> "pygame.mixer.Sound":
         arr = generate_loop()
         _cached = pygame.sndarray.make_sound(arr)
     return _cached
+
+
+def _reset_cache() -> None:
+    global _cached
+    _cached = None
