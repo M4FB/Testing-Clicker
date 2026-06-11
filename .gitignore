@@ -1,0 +1,6 @@
+.python-version
+.claude
+.pytest_cache
+.venv
+informe/
+first.py
