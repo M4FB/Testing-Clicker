@@ -37,13 +37,25 @@ def main() -> None:
     # ── Bucle menú → juego → menú ─────────────────────────────────────────────
     from src.menu import MainMenu
     from src.pygame_ui import GameUI
+    from src.save import load_game
+    from src import sfx
 
     while True:
         action = MainMenu(screen).run()
         if action == "quit":
             break
 
-        result = GameUI(screen=screen, music=music).run()
+        state, meta = (None, {})
+        if action == "cont":
+            state, meta = load_game()
+        if meta:
+            if music and "music_vol" in meta:
+                music.set_volume(meta["music_vol"])
+            if "sfx_vol" in meta:
+                sfx.set_volume(meta["sfx_vol"])
+
+        result = GameUI(screen=screen, music=music,
+                        state=state, elapsed=meta.get("elapsed", 0.0)).run()
         if result == "quit":
             break
         # result == "menu" → volver al while

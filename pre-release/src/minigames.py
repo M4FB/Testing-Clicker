@@ -24,6 +24,7 @@ from src.fx import (
     GREEN, RED, ORANGE, PURPLE,
     clamp, lerp, lerp_color, scale_color, ease_out, draw_text, striped_bar,
 )
+from src import sfx
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -138,11 +139,13 @@ class TargetRush(MinigameBase):
                         self.score += 1
                         self.fx.sparks_burst(mx, my, GOLD, 10, 190)
                         self.fx.float_text(mx, my - 14, "+1", GOLD)
+                        sfx.play("coin", 0.7)
                     else:
                         self.score = max(0, self.score - 2)
                         self.fx.sparks_burst(mx, my, RED, 16, 260)
                         self.fx.float_text(mx, my - 14, "-2", RED)
                         self.fx.add_shake(0.3)
+                        sfx.play("bomb", 0.8)
                     break
 
     def update(self, now, dt):
@@ -263,15 +266,18 @@ class GoldRain(MinigameBase):
                     self.score += 1
                     self.fx.sparks_burst(o["x"], basket_y, GOLD, 8, 160)
                     self.fx.float_text(o["x"], basket_y - 18, "+1", GOLD)
+                    sfx.play("coin", 0.6)
                 elif o["kind"] == "gem":
                     self.score += 3
                     self.fx.sparks_burst(o["x"], basket_y, (120, 230, 255), 14, 220)
                     self.fx.float_text(o["x"], basket_y - 18, "+3", (120, 230, 255))
+                    sfx.play("gem", 0.8)
                 else:
                     self.score = max(0, self.score - 3)
                     self.fx.sparks_burst(o["x"], basket_y, RED, 16, 260)
                     self.fx.float_text(o["x"], basket_y - 18, "-3", RED)
                     self.fx.add_shake(0.3)
+                    sfx.play("bomb", 0.8)
             elif o["y"] > self.area.bottom + 14:
                 self.objs.remove(o)
 
@@ -350,6 +356,7 @@ class SimonPlus(MinigameBase):
         self.phase      = "show"
         self.inputs     = []
         self.show_start = now + 0.7
+        self._last_beep = -1
 
     def _show_index(self, now):
         """Índice de la secuencia iluminado ahora (o -1)."""
@@ -380,6 +387,7 @@ class SimonPlus(MinigameBase):
                     self.flash_box, self.flash_until = ci, now + 0.22
                     if ci == self.seq[len(self.inputs)]:
                         self.inputs.append(ci)
+                        sfx.play(f"simon{ci}", 0.7)
                         self.fx.sparks_burst(br.centerx, br.centery,
                                              self.COLORS[ci], 8, 150)
                         if len(self.inputs) == len(self.seq):
@@ -399,7 +407,10 @@ class SimonPlus(MinigameBase):
         if self.finished:
             return
         if self.phase == "show":
-            _, done = self._show_index(now)
+            idx, done = self._show_index(now)
+            if idx >= 0 and idx != self._last_beep:
+                self._last_beep = idx
+                sfx.play(f"simon{self.seq[idx]}", 0.7)
             if done:
                 self.phase = "input"
         elif self.phase == "gap" and now >= self.gap_until:
@@ -514,11 +525,14 @@ class PulseBar(MinigameBase):
         if gain >= 0.6:
             self.hit_msg, self.hit_color = "¡PERFECTO!  +0.6", GOLD
             self.fx.sparks_burst(mxp, bar.centery, GOLD, 18, 260)
+            sfx.play("coin", 0.8)
         elif gain > 0:
             self.hit_msg, self.hit_color = "¡Bien!  +0.3", GREEN
             self.fx.sparks_burst(mxp, bar.centery, GREEN, 10, 180)
+            sfx.play("tick", 0.8)
         else:
             self.hit_msg, self.hit_color = "Fuera de zona", RED
+            sfx.play("error", 0.4)
 
     def _resolve(self):
         if self.bonus > 0:

@@ -117,6 +117,40 @@ class GameState:
         self.generators[gen_id] += 1
         return True
 
+    # ── Compra múltiple ──────────────────────────────────────────────────────
+
+    def generator_cost_n(self, gen_id: str, n: int) -> int:
+        """Coste total de comprar n unidades seguidas (suma de ceils por unidad)."""
+        base  = next(g["cost"] for g in GENERATORS if g["id"] == gen_id)
+        owned = self.generators[gen_id]
+        return sum(math.ceil(base * (PRICE_SCALE ** (owned + i)) * BOOST)
+                   for i in range(n))
+
+    def max_affordable_generators(self, gen_id: str, cap: int = 200) -> int:
+        """Cuántas unidades seguidas alcanzan los puntos actuales (máx. cap)."""
+        if not self.generator_unlocked(gen_id):
+            return 0
+        base  = next(g["cost"] for g in GENERATORS if g["id"] == gen_id)
+        owned = self.generators[gen_id]
+        pts   = self.points
+        cnt   = 0
+        while cnt < cap:
+            c = math.ceil(base * (PRICE_SCALE ** (owned + cnt)) * BOOST)
+            if pts < c:
+                break
+            pts -= c
+            cnt += 1
+        return cnt
+
+    def buy_generator_n(self, gen_id: str, n: int) -> int:
+        """Compra hasta n unidades; devuelve cuántas se compraron."""
+        bought = 0
+        for _ in range(n):
+            if not self.buy_generator(gen_id):
+                break
+            bought += 1
+        return bought
+
     # ── Mejoras de clic ──────────────────────────────────────────────────────
 
     def click_upgrade_cost(self, upg_id: str) -> int:

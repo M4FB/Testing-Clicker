@@ -27,6 +27,8 @@ from src.fx import (
     Nebula, StarField, FX, Toasts, Roll, shiny_button, striped_bar, draw_coin,
 )
 from src.minigames import MINIGAMES
+from src.save import save_game
+from src import sfx
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Constantes de pantalla
@@ -99,7 +101,8 @@ class _QTE:
 # ═══════════════════════════════════════════════════════════════════════════════
 class GameUI:
     def __init__(self, screen: pygame.Surface | None = None,
-                 music: "pygame.mixer.Sound | None" = None):
+                 music: "pygame.mixer.Sound | None" = None,
+                 state: GameState | None = None, elapsed: float = 0.0):
         if screen is None:
             pygame.init()
             self.screen = pygame.display.set_mode((W, H))
@@ -125,8 +128,9 @@ class GameUI:
                   "sm": self.f_sm, "xs": self.f_xs, "btn": self.f_btn}
 
         # ── Juego ─────────────────────────────────────────────────────────────
-        self.game       = GameState()
-        self.start_time = time.time()
+        self.game       = state if state is not None else GameState()
+        self.start_time = time.time() - elapsed
+        self._next_autosave = time.time() + 15.0
 
         # ── Fondo y efectos ───────────────────────────────────────────────────
         self.bg_grad  = vgradient(W, H, BG, BG2)
@@ -169,6 +173,10 @@ class GameUI:
         self._scroll_target    = 0.0
         self._right_max_scroll = 0
 
+        # ── Compra múltiple ───────────────────────────────────────────────────
+        self.buy_qty: int | str = 1          # 1 | 10 | "max"
+        self._qty_rects: list = []           # [(rect, valor), ...]
+
         # ── Rects interactivos ────────────────────────────────────────────────
         self._click_rect:    pygame.Rect | None = None
         self._prestige_rect: pygame.Rect | None = None
@@ -200,6 +208,7 @@ class GameUI:
     def _handle_events(self, events, mx, my):
         for event in events:
             if event.type == pygame.QUIT:
+                self._save()
                 pygame.quit(); sys.exit()
 
             # Victoria: clic para cerrar overlay
@@ -217,12 +226,20 @@ class GameUI:
                         self.music.set_volume(max(0.0, self.music.get_volume() - 0.05))
                     elif event.key == pygame.K_RIGHT and self.music:
                         self.music.set_volume(min(1.0, self.music.get_volume() + 0.05))
+                    elif event.key == pygame.K_UP:
+                        sfx.set_volume(sfx.get_volume() + 0.05)
+                        sfx.play("tick")
+                    elif event.key == pygame.K_DOWN:
+                        sfx.set_volume(sfx.get_volume() - 0.05)
+                        sfx.play("tick")
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self._pause_resume_rect and self._pause_resume_rect.collidepoint(mx, my):
                         self.paused = False
                     if self._pause_menu_rect and self._pause_menu_rect.collidepoint(mx, my):
+                        self._save()
                         self._exit_to = "menu"
                     if self._pause_quit_rect and self._pause_quit_rect.collidepoint(mx, my):
+                        self._save()
                         pygame.quit(); sys.exit()
                 continue
 
@@ -253,6 +270,8 @@ class GameUI:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.paused = True
+                    self._save()
+                    self.toasts.add("Partida guardada", MUTED, 1.6)
                 elif event.key == pygame.K_SPACE:
                     self._do_click(mx, my)
                 elif event.key == pygame.K_p:
@@ -260,6 +279,10 @@ class GameUI:
 
             # Ratón juego
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for r, val in self._qty_rects:
+                    if r.collidepoint(mx, my):
+                        self.buy_qty = val
+                        sfx.play("tick", 0.6)
                 if self._click_rect and self._click_rect.collidepoint(mx, my):
                     self._do_click(mx, my)
                 if self._prestige_rect and self._prestige_rect.collidepoint(mx, my):
@@ -289,10 +312,17 @@ class GameUI:
             self.fx.confetti_burst(W, 130)
             self.fx.add_shake(0.5)
             self.toasts.add("★ ¡VICTORIA! Modo infinito desbloqueado", GOLD, 5.0)
+            sfx.play("fanfare")
+
+        # Autoguardado periódico
+        if now >= self._next_autosave:
+            self._save()
+            self._next_autosave = now + 30.0
 
         # Minijuego disponible
         if not self.mini_available and self.mini is None and now >= self.next_minigame:
             self.mini_available = True
+            sfx.play("coin", 0.6)
 
         # Minijuego activo
         if self.mini:
@@ -305,8 +335,10 @@ class GameUI:
                     self._boost_total = dur
                     self.fx.confetti_burst(W, 50)
                     self.toasts.add(f"★ Boost ×{mult:.1f} por {dur:.0f}s", PURPLE, 4.0)
+                    sfx.play("win")
                 else:
                     self.toasts.add(self.mini.result_msg, RED, 3.0)
+                    sfx.play("fail", 0.7)
             if self.mini.finished and now >= self.mini.close_at:
                 self.mini = None
 
@@ -367,26 +399,38 @@ class GameUI:
             self.fx.add_shake(0.18)
         self.ripples.append({"x": cx, "y": cy, "born": now})
         self.click_anim_end = now + 0.12
+        sfx.play("click", 0.7)
 
     def _buy_generator(self, idx):
         gen = GENERATORS[idx]
-        if self.game.buy_generator(gen["id"]):
-            n = self.game.generators[gen["id"]]
-            self.toasts.add(f"✓ {gen['name']} comprado (×{n})", GREEN)
-            r = self._gen_rects[idx]
-            if r:
-                self.fx.sparks_burst(r.centerx, r.centery, GREEN, 12, 190)
-        elif not self.game.generator_unlocked(gen["id"]):
+        g   = self.game
+        if not g.generator_unlocked(gen["id"]):
             self.toasts.add(f"{gen['name']}: bloqueado", RED)
-        else:
-            falta = self.game.generator_cost(gen["id"]) - self.game.points
-            self.toasts.add(f"Faltan {fmt(falta)} pts", RED)
+            sfx.play("error", 0.5)
+            return
+        n = g.max_affordable_generators(gen["id"]) if self.buy_qty == "max" \
+            else self.buy_qty
+        if n == 0 or g.points < g.generator_cost_n(gen["id"], n):
+            want  = 1 if self.buy_qty == "max" else self.buy_qty
+            falta = g.generator_cost_n(gen["id"], want) - g.points
+            self.toasts.add(f"Faltan {fmt(falta)} pts (×{want})", RED)
+            sfx.play("error", 0.5)
+            return
+        bought = g.buy_generator_n(gen["id"], n)
+        total  = g.generators[gen["id"]]
+        self.toasts.add(f"✓ {gen['name']} +{bought}  (total ×{total})", GREEN)
+        sfx.play("buy")
+        r = self._gen_rects[idx]
+        if r:
+            self.fx.sparks_burst(r.centerx, r.centery, GREEN,
+                                 12 + min(18, bought * 2), 190)
 
     def _buy_gen_upgrade(self, idx):
         gu = GEN_UPGRADES[idx]
         if self.game.buy_gen_upgrade(gu["id"]):
             tgt = next((g["name"] for g in GENERATORS if g["id"] == gu["target"]), "todos")
             self.toasts.add(f"✓ {gu['name']} — ×{gu['mult']} {tgt}", ORANGE)
+            sfx.play("upgrade")
             r = self._gu_rects[idx]
             if r:
                 self.fx.sparks_burst(r.centerx, r.centery, ORANGE, 12, 190)
@@ -395,6 +439,7 @@ class GameUI:
         else:
             falta = self.game.gen_upgrade_cost(gu["id"]) - self.game.points
             self.toasts.add(f"Faltan {fmt(falta)} pts", RED)
+            sfx.play("error", 0.5)
 
     def _buy_upgrade(self, idx):
         upg = CLICK_UPGRADES[idx]
@@ -404,6 +449,7 @@ class GameUI:
             if bonus:       parts.append(f"+{fmt(bonus*BOOST)}/clic")
             if mult != 1.0: parts.append(f"×{mult:.1f}")
             self.toasts.add(f"✓ {upg['name']}  {' '.join(parts)}", GREEN)
+            sfx.play("upgrade")
             r = self._upg_rects[idx]
             if r:
                 self.fx.sparks_burst(r.centerx, r.centery, GREEN, 12, 190)
@@ -414,6 +460,7 @@ class GameUI:
         else:
             falta = self.game.click_upgrade_cost(upg["id"]) - self.game.points
             self.toasts.add(f"Faltan {fmt(falta)} pts", RED)
+            sfx.play("error", 0.5)
 
     def _do_prestige(self):
         if self.game.can_prestige():
@@ -424,6 +471,16 @@ class GameUI:
             self.fx.confetti_burst(W, 110)
             self.fx.add_shake(0.45)
             self.combo = 0
+            sfx.play("fanfare")
+
+    def _save(self):
+        try:
+            save_game(self.game,
+                      elapsed=time.time() - self.start_time,
+                      music_vol=self.music.get_volume() if self.music else None,
+                      sfx_vol=sfx.get_volume())
+        except OSError:
+            pass
 
     def _open_minigame(self):
         if not self.mini_available:
@@ -441,11 +498,13 @@ class GameUI:
             return
         if key == self._qte.sequence[self._qte.current]:
             self._qte.current += 1
+            sfx.play("tick", 0.6)
             if self._qte.done:
                 self.game.activate_qte_bonus(3.0, 60.0)
                 self._qte_total = 60.0
                 self.toasts.add("¡QTE COMPLETADO!  Bonus ×3 por 60s", PURPLE, 5.0)
                 self.fx.confetti_burst(W, 60)
+                sfx.play("win")
                 self._qte      = None
                 self._next_qte = time.time() + QTE_COOLDOWN
         else:
@@ -453,6 +512,7 @@ class GameUI:
             self._qte.fail_until = time.time() + 1.5
             self.fx.add_shake(0.25)
             self.toasts.add("QTE fallado.", RED, 2.0)
+            sfx.play("fail", 0.7)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Dibujo principal
@@ -756,8 +816,24 @@ class GameUI:
                   btn_r.centerx, btn_r.centery, "center")
 
     def _draw_generators_right(self, cv, x, vy, pw, mx, my) -> int:
+        self._qty_rects = []
         if self._row_visible(vy, 24):
-            draw_text(cv, "GENERADORES", self.f_med, TXT, x, self._sy(vy))
+            sy = self._sy(vy)
+            draw_text(cv, "GENERADORES", self.f_med, TXT, x, sy)
+            # Toggles de cantidad: ×1 / ×10 / MAX
+            bw, bh, gap = 46, 22, 6
+            bx0 = x + pw - 3 * bw - 2 * gap
+            for j, (lab, val) in enumerate([("×1", 1), ("×10", 10), ("MAX", "max")]):
+                r      = pygame.Rect(bx0 + j * (bw + gap), sy - 1, bw, bh)
+                active = self.buy_qty == val
+                hov    = r.collidepoint(mx, my)
+                base   = (38, 52, 76) if active else ((28, 34, 48) if hov else (22, 27, 38))
+                pygame.draw.rect(cv, base, r, border_radius=6)
+                pygame.draw.rect(cv, ACCENT if active else BORDER, r,
+                                 2 if active else 1, border_radius=6)
+                draw_text(cv, lab, self.f_xs, ACCENT if active else MUTED,
+                          r.centerx, r.centery, "center")
+                self._qty_rects.append((r, val))
         vy += 26
         row_h = 70; btn_w = 130; btn_h = 32
 
@@ -780,12 +856,18 @@ class GameUI:
                           self.f_xs, (70, 78, 92), x + PAD, sy + 38)
                 self._gen_rects[i] = None
             else:
-                owned   = self.game.generators[gen["id"]]
-                cost    = self.game.generator_cost(gen["id"])
-                can_buy = self.game.can_buy_generator(gen["id"])
-                pps_r   = (gen["pps"] * self.game.prestige_multiplier * BOOST
-                           * self.game.gen_mult.get(gen["id"], 1.0)
-                           * self.game.gen_mult.get("all", 1.0))
+                g     = self.game
+                owned = g.generators[gen["id"]]
+                if self.buy_qty == "max":
+                    n_buy   = max(1, g.max_affordable_generators(gen["id"]))
+                    can_buy = g.max_affordable_generators(gen["id"]) >= 1
+                else:
+                    n_buy   = self.buy_qty
+                    can_buy = g.points >= g.generator_cost_n(gen["id"], n_buy)
+                cost  = g.generator_cost_n(gen["id"], n_buy)
+                pps_r = (gen["pps"] * g.prestige_multiplier * BOOST
+                         * g.gen_mult.get(gen["id"], 1.0)
+                         * g.gen_mult.get("all", 1.0))
                 draw_panel(cv, rect, color=(24, 32, 44) if can_buy else PANEL,
                            border=scale_color(GREEN, 0.55) if can_buy else BORDER)
                 draw_text(cv, gen["name"], self.f_med, TXT, x + PAD, sy + 10)
@@ -807,6 +889,10 @@ class GameUI:
                                     sy + (row_h - 4 - btn_h) // 2, btn_w, btn_h)
                 self._gen_rects[i] = btn_r
                 self._cost_button(cv, btn_r, cost, can_buy, mx, my)
+                if n_buy > 1:
+                    draw_text(cv, f"compra ×{n_buy}", self.f_xs,
+                              GREEN if can_buy else MUTED,
+                              btn_r.centerx, btn_r.y - 3, "midbottom")
             vy += row_h
         return vy
 
@@ -1028,7 +1114,7 @@ class GameUI:
         cv.blit(overlay, (0, 0))
         now = time.time()
 
-        pw, ph = 380, 290
+        pw, ph = 380, 330
         px, py = (W - pw) // 2, (H - ph) // 2
         panel  = pygame.Rect(px, py, pw, ph)
         pygame.draw.rect(cv, (20, 24, 34), panel, border_radius=12)
@@ -1038,14 +1124,21 @@ class GameUI:
         draw_text(cv, "PAUSA", self.f_big, TXT, cx, py + 26, "center")
         pygame.draw.line(cv, BORDER, (px + 30, py + 62), (px + pw - 30, py + 62), 1)
 
-        vol = self.music.get_volume() if self.music else 0.0
-        bx  = cx - 80
-        draw_text(cv, "Vol:", self.f_sm, MUTED, bx - 36, py + 80)
-        striped_bar(cv, pygame.Rect(bx, py + 80, 160, 13), vol, ACCENT, now=now, radius=5)
-        draw_text(cv, f"{int(vol*100)}%", self.f_sm, MUTED, bx + 170, py + 80)
-        draw_text(cv, "← → para ajustar", self.f_xs, MUTED, cx, py + 102, "center")
+        bx = cx - 60
+        mvol = self.music.get_volume() if self.music else 0.0
+        draw_text(cv, "Música:", self.f_sm, MUTED, bx - 64, py + 78)
+        striped_bar(cv, pygame.Rect(bx, py + 78, 150, 13), mvol, ACCENT, now=now, radius=5)
+        draw_text(cv, f"{int(mvol*100)}%", self.f_sm, MUTED, bx + 158, py + 78)
 
-        y0 = py + 132
+        svol = sfx.get_volume()
+        draw_text(cv, "Sonidos:", self.f_sm, MUTED, bx - 64, py + 102)
+        striped_bar(cv, pygame.Rect(bx, py + 102, 150, 13), svol, PURPLE, now=now, radius=5)
+        draw_text(cv, f"{int(svol*100)}%", self.f_sm, MUTED, bx + 158, py + 102)
+
+        draw_text(cv, "← → música    ↑ ↓ sonidos", self.f_xs, MUTED,
+                  cx, py + 126, "center")
+
+        y0 = py + 152
         rects = {}
         for label, key in [("CONTINUAR", "resume"), ("MENÚ PRINCIPAL", "menu"),
                            ("SALIR DEL JUEGO", "quit")]:

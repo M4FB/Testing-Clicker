@@ -7,6 +7,7 @@ import time
 import pygame
 
 from src.config import MODE
+from src.save import has_compatible_save
 from src.fx import (
     BG, BG2, BORDER, TXT, MUTED, ACCENT, GOLD, GREEN, ORANGE, PURPLE,
     lerp_color, ease_out, draw_text, vgradient,
@@ -87,7 +88,7 @@ class MainMenu:
         self.buttons = [
             {"label": "NUEVA PARTIDA", "action": "new",  "en": True,
              "rect": pygame.Rect(cx - btn_w // 2, cy0,           btn_w, btn_h)},
-            {"label": "CONTINUAR",     "action": "cont", "en": False,
+            {"label": "CONTINUAR",     "action": "cont", "en": has_compatible_save(),
              "rect": pygame.Rect(cx - btn_w // 2, cy0 + gap,     btn_w, btn_h)},
             {"label": "SALIR",         "action": "quit", "en": True,
              "rect": pygame.Rect(cx - btn_w // 2, cy0 + gap * 2, btn_w, btn_h)},
