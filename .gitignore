@@ -5,3 +5,5 @@
 informe/
 first.py
 2.0/
+__pycache__/
+*.pyc
