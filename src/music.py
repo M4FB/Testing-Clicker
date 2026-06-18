@@ -134,11 +134,98 @@ def generate_loop(duration: float = 12.0) -> np.ndarray:
     return np.int16(stereo * 32767)
 
 
-_cached: "pygame.mixer.Sound | None" = None
+# ── Música del menú ─────────────────────────────────────────────────────────
+# Pieza deliberadamente distinta a la del juego: Fa mayor (luminosa) en vez
+# de Do menor, tempo más lento, pad etéreo con campanas y eco amplio. Da una
+# sensación de calma/portada frente al pulso "chiptune" del juego.
+
+def generate_menu_loop(duration: float = 16.0) -> np.ndarray:
+    """Loop ambiente para el menú principal. Array int16 stereo (N, 2)."""
+    n  = int(_SR * duration)
+    t  = np.linspace(0, duration, n, endpoint=False)
+    au = np.zeros(n, dtype=np.float64)
+
+    # Frecuencias (Hz) — escala de Fa mayor
+    F2,  A2,  Bb2, C3 = 87.31, 110.00, 116.54, 130.81
+    D4,  E4,  F4,  G4 = 293.66, 329.63, 349.23, 392.00
+    A3,  C4          = 220.00, 261.63
+    A4,  Bb4, C5, F5 = 440.00, 466.16, 523.25, 698.46
+
+    bar = duration / 4    # 4 s por compás (la mitad de rápido que el juego)
+
+    # ── Capa 1: Pad de acordes Maj7 + sub-bajo suave (uno por compás) ─────
+    # Progresión Fmaj7 – Am7 – Bbmaj7 – C : cálida y resolutiva.
+    chords = [
+        [F4, A4, C5, E4],     # Fmaj7
+        [E4, A4, C5, E4],     # Am7
+        [D4, F4, A4, Bb4],    # Bbmaj7
+        [E4, G4, C5, Bb4],    # C7
+    ]
+    roots = [F2, A2, Bb2, C3]
+    for bi, chord in enumerate(chords):
+        t0 = bi * bar
+        m  = (t >= t0) & (t < t0 + bar)
+        if not m.any():
+            continue
+        tl   = t[m] - t0
+        penv = _ar(tl, bar * 0.30, bar * 0.42, bar)   # ataque lento = pad
+        for freq in chord:
+            au[m] += 0.040 * penv * _sine(freq, tl)
+            au[m] += 0.010 * penv * _sine(freq * 2, tl)
+        renv = _ar(tl, bar * 0.10, bar * 0.45, bar)
+        au[m] += 0.13 * renv * _tri(roots[bi], tl)
+
+    # ── Capa 2: Arpegio campana (senos con resonancia que se solapa) ──────
+    arp = [
+        F4, A4, C5, A4,   E4, A4, C5, E4,
+        D4, F4, A4, F4,   E4, G4, C5, G4,
+    ]
+    nd = duration / len(arp)
+    for i, freq in enumerate(arp):
+        t0 = i * nd
+        m  = (t >= t0) & (t < t0 + nd * 1.7)          # cola que resuena
+        if not m.any():
+            continue
+        tl  = t[m] - t0
+        env = np.exp(-tl * 2.1) * np.clip(tl / 0.010, 0, 1)
+        au[m] += 0.046 * env * _sine(freq, tl)
+        au[m] += 0.010 * env * _sine(freq * 2, tl)
+
+    # ── Capa 3: Destello agudo lento, medio compás ───────────────────────
+    for bi in range(4):
+        t0  = bi * bar + bar * 0.5
+        dur = bar * 0.5
+        m   = (t >= t0) & (t < t0 + dur)
+        if not m.any():
+            continue
+        tl  = t[m] - t0
+        env = np.exp(-tl * 4.0) * np.clip(tl / 0.02, 0, 1)
+        au[m] += 0.016 * env * _sine(F5, tl)
+
+    # ── Eco amplio (más espacioso que el juego) ──────────────────────────
+    for delay_ms, decay in [(190, 0.30), (380, 0.17)]:
+        ds = int(_SR * delay_ms / 1000)
+        if ds < n:
+            au[ds:] += decay * au[:-ds]
+
+    # ── Crossfade + normalizar ───────────────────────────────────────────
+    fade = int(_SR * 0.10)
+    au[:fade]  *= np.linspace(0, 1, fade)
+    au[-fade:] *= np.linspace(1, 0, fade)
+    peak = np.max(np.abs(au))
+    if peak > 0:
+        au = au / peak * 0.64
+
+    stereo = np.column_stack([au, au])
+    return np.int16(stereo * 32767)
+
+
+_cached:      "pygame.mixer.Sound | None" = None
+_cached_menu: "pygame.mixer.Sound | None" = None
 
 
 def get_music_sound() -> "pygame.mixer.Sound":
-    """Devuelve el Sound generado (lo crea solo la primera vez)."""
+    """Devuelve el Sound del juego (lo crea solo la primera vez)."""
     global _cached
     if _cached is None:
         arr = generate_loop()
@@ -146,6 +233,15 @@ def get_music_sound() -> "pygame.mixer.Sound":
     return _cached
 
 
+def get_menu_music_sound() -> "pygame.mixer.Sound":
+    """Devuelve el Sound del menú (lo crea solo la primera vez)."""
+    global _cached_menu
+    if _cached_menu is None:
+        _cached_menu = pygame.sndarray.make_sound(generate_menu_loop())
+    return _cached_menu
+
+
 def _reset_cache() -> None:
-    global _cached
+    global _cached, _cached_menu
     _cached = None
+    _cached_menu = None

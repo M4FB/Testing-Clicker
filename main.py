@@ -33,12 +33,16 @@ def main() -> None:
     pygame.display.set_caption("Clicker Game")
 
     # ── Música de fondo procedural ────────────────────────────────────────────
-    music = None
+    # Dos pistas distintas: una para el menú (calmada, Fa mayor) y otra para el
+    # juego (chiptune, Do menor). Se alternan según la pantalla activa.
+    music = menu_music = None
+    vol   = (info.get("music_vol", 0.32) if info else 0.32)
     try:
-        from src.music import get_music_sound
+        from src.music import get_music_sound, get_menu_music_sound
         music = get_music_sound()
-        music.set_volume(0.32)
-        music.play(loops=-1)
+        music.set_volume(vol)
+        menu_music = get_menu_music_sound()
+        menu_music.set_volume(vol)
     except Exception as exc:
         print(f"[música] No se pudo iniciar: {exc}", file=sys.stderr)
 
@@ -48,7 +52,15 @@ def main() -> None:
     from src import sfx
 
     while True:
+        if music:
+            music.stop()
+        if menu_music:
+            menu_music.play(loops=-1)
+
         action = MainMenu(screen).run()
+
+        if menu_music:
+            menu_music.stop()
         if action == "quit":
             break
 
@@ -61,8 +73,12 @@ def main() -> None:
             if "sfx_vol" in meta:
                 sfx.set_volume(meta["sfx_vol"])
 
+        if music:
+            music.play(loops=-1)
         result = GameUI(screen=screen, music=music,
                         state=state, elapsed=meta.get("elapsed", 0.0)).run()
+        if music:
+            music.stop()
         if result == "quit":
             break
         # result == "menu" → volver al while
