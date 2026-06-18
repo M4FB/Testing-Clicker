@@ -23,44 +23,41 @@ def main() -> None:
         pass
 
     from src.ui import W, H
-    from src.save import load_game, save_info
+    from src.save import load_game, load_prefs
 
+    # ── Preferencias (volúmenes / pantalla), independientes de la partida ─────
+    prefs = load_prefs()
     flags = pygame.SCALED
-    info  = save_info()
-    if info and info.get("fullscreen"):
+    if prefs.get("fullscreen"):
         flags |= pygame.FULLSCREEN
     screen = pygame.display.set_mode((W, H), flags)
     pygame.display.set_caption("Clicker Game")
 
+    from src import sfx
+    sfx.set_volume(prefs.get("sfx_vol", 0.5))
+
     # ── Música de fondo procedural ────────────────────────────────────────────
-    # Dos pistas distintas: una para el menú (calmada, Fa mayor) y otra para el
-    # juego (chiptune, Do menor). Se alternan según la pantalla activa.
-    music = menu_music = None
-    vol   = (info.get("music_vol", 0.32) if info else 0.32)
+    # Tres pistas distintas (menú / juego / ajustes) gestionadas por un único
+    # MusicManager que hace crossfade entre ellas. Se pre-generan en segundo
+    # plano con una semilla por sesión (variación procedural entre arranques).
+    music = None
     try:
-        from src.music import get_music_sound, get_menu_music_sound
-        music = get_music_sound()
-        music.set_volume(vol)
-        menu_music = get_menu_music_sound()
-        menu_music.set_volume(vol)
+        from src import music as music_mod
+        music_mod.set_session_seed()              # variación por arranque
+        music_mod.prepare_async()                 # genera en un hilo
+        music = music_mod.MusicManager(volume=prefs.get("music_vol", 0.32))
     except Exception as exc:
         print(f"[música] No se pudo iniciar: {exc}", file=sys.stderr)
 
     # ── Bucle menú → juego → menú ─────────────────────────────────────────────
     from src.menu import MainMenu
     from src.ui import GameUI
-    from src import sfx
 
     while True:
         if music:
-            music.stop()
-        if menu_music:
-            menu_music.play(loops=-1)
+            music.play("menu")
 
-        action = MainMenu(screen).run()
-
-        if menu_music:
-            menu_music.stop()
+        action = MainMenu(screen, music=music).run()
         if action == "quit":
             break
 
@@ -74,15 +71,15 @@ def main() -> None:
                 sfx.set_volume(meta["sfx_vol"])
 
         if music:
-            music.play(loops=-1)
+            music.play("game")
         result = GameUI(screen=screen, music=music,
                         state=state, elapsed=meta.get("elapsed", 0.0)).run()
-        if music:
-            music.stop()
         if result == "quit":
             break
         # result == "menu" → volver al while
 
+    if music:
+        music.stop()
     pygame.quit()
     sys.exit()
 

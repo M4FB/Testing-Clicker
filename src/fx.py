@@ -500,6 +500,44 @@ def striped_bar(surf, rect, frac, fg, bg=PANEL2, now=0.0, radius=5):
     pygame.draw.rect(surf, BORDER, rect, 1, border_radius=radius)
 
 
+def draw_sparkline(surf, rect, values, color=ACCENT, *, fill=True, now=0.0):
+    """Mini-gráfico de líneas dentro de `rect` a partir de `values`.
+
+    Escala automáticamente al mínimo/máximo. Con <2 puntos dibuja una guía
+    plana. Un punto brillante marca el último valor (animación de pulso).
+    """
+    pygame.draw.rect(surf, (14, 18, 28), rect, border_radius=5)
+    pygame.draw.rect(surf, BORDER, rect, 1, border_radius=5)
+    vals = [float(v) for v in (values or [])]
+    inx, iny = rect.x + 4, rect.y + 4
+    inw, inh = rect.width - 8, rect.height - 8
+    if len(vals) < 2:
+        y = rect.centery
+        pygame.draw.line(surf, scale_color(color, 0.5),
+                         (inx, y), (inx + inw, y), 1)
+        return
+    lo, hi = min(vals), max(vals)
+    span = hi - lo
+    n = len(vals)
+    pts = []
+    for i, v in enumerate(vals):
+        x = inx + inw * i / (n - 1)
+        frac = 0.5 if span <= 0 else (v - lo) / span
+        y = iny + inh * (1.0 - frac)
+        pts.append((x, y))
+    if fill:
+        poly = pts + [(pts[-1][0], rect.bottom - 2), (pts[0][0], rect.bottom - 2)]
+        shade = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.polygon(shade, (*color, 46),
+                            [(px - rect.x, py - rect.y) for px, py in poly])
+        surf.blit(shade, rect.topleft)
+    pygame.draw.lines(surf, color, False, pts, 2)
+    # punto final con pulso
+    pr = 2 + int(1.5 * (0.5 + 0.5 * math.sin(now * 4.0)))
+    pygame.draw.circle(surf, scale_color(color, 1.4),
+                       (int(pts[-1][0]), int(pts[-1][1])), pr)
+
+
 def draw_coin(surf, cx, cy, r, now, speed=1.6):
     """Moneda dorada girando (squash horizontal senoidal)."""
     squash = abs(math.sin(now * speed))

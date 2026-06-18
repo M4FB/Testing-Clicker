@@ -1,4 +1,6 @@
 """Constantes de pantalla, fuentes y helpers compartidos por la UI."""
+import time
+
 import pygame
 
 from src.fx import BORDER, PANEL
@@ -11,15 +13,28 @@ HDR_H  = 50
 STS_H  = 30
 PAD    = 14
 
+# ─── Fuentes (rutas centralizadas; única fuente de verdad de toda la app) ────
 _FONT_REG  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 _FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+_font_cache: dict = {}
 
 
 def font(size, bold=False):
-    try:
-        return pygame.font.Font(_FONT_BOLD if bold else _FONT_REG, size)
-    except Exception:
-        return pygame.font.SysFont("sans", size, bold=bold)
+    """Devuelve una fuente cacheada; cae a la del sistema si falta DejaVu."""
+    key = (size, bold)
+    f = _font_cache.get(key)
+    if f is None:
+        try:
+            f = pygame.font.Font(_FONT_BOLD if bold else _FONT_REG, size)
+        except Exception:
+            try:
+                path = pygame.font.match_font("dejavusans", bold=bold) \
+                       or pygame.font.get_default_font()
+                f = pygame.font.Font(path, size)
+            except Exception:
+                f = pygame.font.SysFont("sans", size, bold=bold)
+        _font_cache[key] = f
+    return f
 
 
 def make_fonts() -> dict:
@@ -60,6 +75,37 @@ def draw_panel(surf, rect, color=PANEL, border=BORDER, radius=9):
     shine.fill((255, 255, 255, 16))
     surf.blit(shine, (rect.x + 2, rect.y + 2))
     pygame.draw.rect(surf, border, rect, 1, border_radius=radius)
+
+
+# ─── Transiciones (fundido a negro entre pantallas) ──────────────────────────
+def fade_out(screen, clock=None, dur: float = 0.30) -> None:
+    """Funde a negro el frame ya dibujado en `screen` (bloqueante, ~dur s)."""
+    snap = screen.copy()
+    blk  = pygame.Surface(screen.get_size())
+    blk.fill((0, 0, 0))
+    clock = clock or pygame.time.Clock()
+    t0 = time.time()
+    while True:
+        t = (time.time() - t0) / dur
+        if t >= 1.0:
+            break
+        screen.blit(snap, (0, 0))
+        blk.set_alpha(int(255 * t))
+        screen.blit(blk, (0, 0))
+        pygame.display.flip()
+        clock.tick(FPS)
+    screen.fill((0, 0, 0))
+    pygame.display.flip()
+
+
+def fade_in_alpha(start: float, dur: float = 0.30) -> int:
+    """Alpha (255→0) de un velo negro para fundir DESDE negro al entrar.
+
+    Devuelve 0 una vez superada la ventana de tiempo (sin velo)."""
+    t = (time.time() - start) / dur
+    if t >= 1.0:
+        return 0
+    return int(255 * (1.0 - max(0.0, t)))
 
 
 # ─── Pantalla completa ───────────────────────────────────────────────────────

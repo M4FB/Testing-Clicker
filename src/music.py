@@ -6,6 +6,9 @@ Produce un loop de ~12 s en C menor con tres capas:
   - Arpegio chiptune (onda cuadrada baja en armónicos, corcheas)
 Más dos ecos simples para dar sensación de espacio.
 """
+import random
+import threading
+
 import numpy as np
 import pygame
 
@@ -39,8 +42,13 @@ def _ar(t: np.ndarray, attack: float, release: float, total: float) -> np.ndarra
 
 # ── Generador principal ───────────────────────────────────────────────────────
 
-def generate_loop(duration: float = 12.0) -> np.ndarray:
-    """Devuelve un array int16 stereo con forma (N, 2)."""
+def generate_loop(duration: float = 12.0, seed: int | None = None) -> np.ndarray:
+    """Devuelve un array int16 stereo con forma (N, 2).
+
+    `seed` introduce variación procedural: con la misma semilla el resultado
+    es idéntico (reproducible para tests); con None se usa la variante base.
+    """
+    rng = random.Random(seed) if seed is not None else None
     n  = int(_SR * duration)
     t  = np.linspace(0, duration, n, endpoint=False)
     au = np.zeros(n, dtype=np.float64)
@@ -86,12 +94,22 @@ def generate_loop(duration: float = 12.0) -> np.ndarray:
             au[m] += 0.020 * env * _sine(freq * 2, tl)
 
     # ── Capa 3: Arpegio chiptune, corcheas (32 notas) ────────────────────
-    arp = [
-        C4,  Eb4, G4,  C5,   G4,  Eb4, C4,  G3,   # compás 1 (Cm ↑↓)
-        C4,  G4,  Eb4, G4,   C4,  Eb4, G4,  C4,   # compás 2 (Cm variación)
-        Ab3, C4,  Eb4, Ab3,  C4,  Eb4, Ab3, C4,   # compás 3 (Ab)
-        G3,  Bb3, C4,  Eb4,  G4,  Eb4, C4,  G3,   # compás 4 (resolución)
+    # Varias variantes melódicas; la semilla elige una (None = la primera).
+    arp_variants = [
+        [C4,  Eb4, G4,  C5,   G4,  Eb4, C4,  G3,
+         C4,  G4,  Eb4, G4,   C4,  Eb4, G4,  C4,
+         Ab3, C4,  Eb4, Ab3,  C4,  Eb4, Ab3, C4,
+         G3,  Bb3, C4,  Eb4,  G4,  Eb4, C4,  G3],
+        [C4,  G4,  Eb4, C5,   Eb4, G4,  C4,  Eb4,
+         G3,  C4,  G4,  Eb4,  C4,  G4,  C5,  G4,
+         Ab3, Eb4, C4,  Ab3,  Eb4, C4,  Ab3, Eb4,
+         G3,  C4,  Bb3, G4,   Eb4, C4,  G3,  C4],
+        [G3,  C4,  Eb4, G4,   C5,  G4,  Eb4, C4,
+         Eb4, G4,  C5,  G4,   Eb4, C4,  G3,  Eb4,
+         C4,  Ab3, Eb4, C4,   Ab3, Eb4, C4,  Ab3,
+         Eb4, G3,  Bb3, C4,   Eb4, G4,  Eb4, C4],
     ]
+    arp = rng.choice(arp_variants) if rng else arp_variants[0]
     nd = duration / len(arp)
     for i, freq in enumerate(arp):
         t0 = i * nd
@@ -139,8 +157,9 @@ def generate_loop(duration: float = 12.0) -> np.ndarray:
 # de Do menor, tempo más lento, pad etéreo con campanas y eco amplio. Da una
 # sensación de calma/portada frente al pulso "chiptune" del juego.
 
-def generate_menu_loop(duration: float = 16.0) -> np.ndarray:
+def generate_menu_loop(duration: float = 16.0, seed: int | None = None) -> np.ndarray:
     """Loop ambiente para el menú principal. Array int16 stereo (N, 2)."""
+    rng = random.Random(seed) if seed is not None else None
     n  = int(_SR * duration)
     t  = np.linspace(0, duration, n, endpoint=False)
     au = np.zeros(n, dtype=np.float64)
@@ -176,10 +195,12 @@ def generate_menu_loop(duration: float = 16.0) -> np.ndarray:
         au[m] += 0.13 * renv * _tri(roots[bi], tl)
 
     # ── Capa 2: Arpegio campana (senos con resonancia que se solapa) ──────
-    arp = [
-        F4, A4, C5, A4,   E4, A4, C5, E4,
-        D4, F4, A4, F4,   E4, G4, C5, G4,
+    arp_variants = [
+        [F4, A4, C5, A4,   E4, A4, C5, E4,   D4, F4, A4, F4,   E4, G4, C5, G4],
+        [C5, A4, F4, A4,   C5, E4, A4, E4,   A4, F4, D4, F4,   C5, G4, E4, G4],
+        [F4, C5, A4, F4,   A4, C5, E4, A4,   D4, A4, F4, A4,   G4, C5, E4, G4],
     ]
+    arp = rng.choice(arp_variants) if rng else arp_variants[0]
     nd = duration / len(arp)
     for i, freq in enumerate(arp):
         t0 = i * nd
@@ -220,28 +241,209 @@ def generate_menu_loop(duration: float = 16.0) -> np.ndarray:
     return np.int16(stereo * 32767)
 
 
-_cached:      "pygame.mixer.Sound | None" = None
-_cached_menu: "pygame.mixer.Sound | None" = None
+# ── Música de la pantalla de ajustes ────────────────────────────────────────
+# Tercera pieza, distinta de las otras dos: minimalista y "técnica". Drone
+# grave con trémolo lento + blips dispersos en pentatónica de La menor.
+
+def generate_config_loop(duration: float = 14.0, seed: int | None = None) -> np.ndarray:
+    """Loop ambiente para la pantalla de ajustes. Array int16 stereo (N, 2)."""
+    rng = random.Random(seed) if seed is not None else None
+    n  = int(_SR * duration)
+    t  = np.linspace(0, duration, n, endpoint=False)
+    au = np.zeros(n, dtype=np.float64)
+
+    A2, E3 = 110.00, 164.81
+    A3, C4, D4, E4, G4, A4, C5 = 220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25
+    penta = [A3, C4, D4, E4, G4, A4, C5]
+
+    # ── Drone sostenido con trémolo lento ────────────────────────────────
+    trem = 0.80 + 0.20 * np.sin(2 * np.pi * 0.12 * t)
+    au += 0.11 * trem * _sine(A2, t)
+    au += 0.05 * trem * _sine(E3, t)
+
+    # ── Blips dispersos (uno cada ~1.75 s) en pentatónica ────────────────
+    nbl  = 8
+    step = duration / nbl
+    seq  = [penta[(i * 2) % len(penta)] for i in range(nbl)]
+    if rng:
+        rng.shuffle(seq)
+    for i, freq in enumerate(seq):
+        t0 = i * step
+        m  = (t >= t0) & (t < t0 + step * 1.2)
+        if not m.any():
+            continue
+        tl  = t[m] - t0
+        env = np.exp(-tl * 2.6) * np.clip(tl / 0.012, 0, 1)
+        au[m] += 0.060 * env * _sine(freq, tl)
+        au[m] += 0.014 * env * _sine(freq * 2, tl)
+
+    # ── Pulso grave suave por cada blanca ────────────────────────────────
+    for k in range(int(duration)):
+        t0 = float(k)
+        m  = (t >= t0) & (t < t0 + 0.5)
+        if not m.any():
+            continue
+        tl  = t[m] - t0
+        env = np.exp(-tl * 5.0) * np.clip(tl / 0.01, 0, 1)
+        au[m] += 0.05 * env * _tri(A2, tl)
+
+    for delay_ms, decay in [(220, 0.26), (440, 0.13)]:
+        ds = int(_SR * delay_ms / 1000)
+        if ds < n:
+            au[ds:] += decay * au[:-ds]
+
+    fade = int(_SR * 0.10)
+    au[:fade]  *= np.linspace(0, 1, fade)
+    au[-fade:] *= np.linspace(1, 0, fade)
+    peak = np.max(np.abs(au))
+    if peak > 0:
+        au = au / peak * 0.58
+
+    stereo = np.column_stack([au, au])
+    return np.int16(stereo * 32767)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Caché, pre-generación y gestor de reproducción
+# ═══════════════════════════════════════════════════════════════════════════════
+_GENERATORS = {
+    "game":   generate_loop,
+    "menu":   generate_menu_loop,
+    "config": generate_config_loop,
+}
+
+_arr_cache: dict = {}              # name → np.ndarray (caro de generar)
+_snd_cache: dict = {}             # name → pygame.mixer.Sound
+_seeds: dict     = {}             # name → semilla de la sesión
+
+
+def set_session_seed(seed: int | None = None) -> None:
+    """Fija una semilla por sesión para que las pistas varíen entre arranques.
+
+    None elige una semilla aleatoria; un entero la hace reproducible.
+    """
+    base = random.randrange(1 << 30) if seed is None else seed
+    for off, name in enumerate(_GENERATORS):
+        _seeds[name] = base + off * 101
+
+
+def _gen_array(name: str) -> np.ndarray:
+    arr = _arr_cache.get(name)
+    if arr is None:
+        arr = _GENERATORS[name](seed=_seeds.get(name))
+        _arr_cache[name] = arr
+    return arr
+
+
+def prepare_async(names=("menu", "game", "config")) -> threading.Thread:
+    """Genera en segundo plano los arrays (numpy) de las pistas indicadas."""
+    def _work():
+        for nm in names:
+            try:
+                _gen_array(nm)
+            except Exception:
+                pass
+    th = threading.Thread(target=_work, daemon=True)
+    th.start()
+    return th
+
+
+def get_sound(name: str) -> "pygame.mixer.Sound":
+    """Devuelve el Sound de la pista (lo construye desde el array cacheado)."""
+    snd = _snd_cache.get(name)
+    if snd is None:
+        snd = pygame.sndarray.make_sound(_gen_array(name))
+        _snd_cache[name] = snd
+    return snd
+
+
+# ── Accesores con nombre (compatibilidad) ────────────────────────────────────
 def get_music_sound() -> "pygame.mixer.Sound":
-    """Devuelve el Sound del juego (lo crea solo la primera vez)."""
-    global _cached
-    if _cached is None:
-        arr = generate_loop()
-        _cached = pygame.sndarray.make_sound(arr)
-    return _cached
+    return get_sound("game")
 
 
 def get_menu_music_sound() -> "pygame.mixer.Sound":
-    """Devuelve el Sound del menú (lo crea solo la primera vez)."""
-    global _cached_menu
-    if _cached_menu is None:
-        _cached_menu = pygame.sndarray.make_sound(generate_menu_loop())
-    return _cached_menu
+    return get_sound("menu")
+
+
+def get_config_music_sound() -> "pygame.mixer.Sound":
+    return get_sound("config")
 
 
 def _reset_cache() -> None:
-    global _cached, _cached_menu
-    _cached = None
-    _cached_menu = None
+    _arr_cache.clear()
+    _snd_cache.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MusicManager: reproduce una pista a la vez con crossfade y "ducking"
+# ═══════════════════════════════════════════════════════════════════════════════
+class MusicManager:
+    """Gestiona las tres pistas en canales propios.
+
+    - `play(name)` hace crossfade desde la pista actual a `name`.
+    - `set_volume` / `get_volume` controlan el volumen de usuario (0..1).
+    - `duck(factor)` atenúa temporalmente sin tocar el volumen de usuario
+      (se usa en pausa: misma música del juego, más bajita).
+    """
+
+    def __init__(self, volume: float = 0.32):
+        self.volume   = max(0.0, min(1.0, volume))
+        self._duck    = 1.0
+        self.current: str | None = None
+        self._channels: dict[str, "pygame.mixer.Channel | None"] = {}
+
+    # ── Volumen ──────────────────────────────────────────────────────────
+    def _applied(self) -> float:
+        return self.volume * self._duck
+
+    def _apply_current(self) -> None:
+        if self.current:
+            try:
+                get_sound(self.current).set_volume(self._applied())
+            except Exception:
+                pass
+
+    def set_volume(self, v: float) -> None:
+        self.volume = max(0.0, min(1.0, v))
+        self._apply_current()
+
+    def get_volume(self) -> float:
+        return self.volume
+
+    def duck(self, factor: float = 0.4) -> None:
+        self._duck = max(0.0, min(1.0, factor))
+        self._apply_current()
+
+    def unduck(self) -> None:
+        self.duck(1.0)
+
+    # ── Reproducción ─────────────────────────────────────────────────────
+    def play(self, name: str, fade_ms: int = 700) -> None:
+        if name == self.current:
+            ch = self._channels.get(name)
+            if ch is not None and ch.get_busy():
+                return
+        # Funde las demás pistas que sigan sonando
+        for nm, ch in list(self._channels.items()):
+            if nm != name and ch is not None and ch.get_busy():
+                try:
+                    ch.fadeout(fade_ms)
+                except Exception:
+                    pass
+        try:
+            snd = get_sound(name)
+            snd.set_volume(self._applied())
+            self._channels[name] = snd.play(loops=-1, fade_ms=fade_ms)
+            self.current = name
+        except Exception:
+            self.current = name   # mixer ausente: estado lógico igualmente
+
+    def stop(self, fade_ms: int = 400) -> None:
+        for ch in self._channels.values():
+            if ch is not None and ch.get_busy():
+                try:
+                    ch.fadeout(fade_ms)
+                except Exception:
+                    pass
+        self.current = None

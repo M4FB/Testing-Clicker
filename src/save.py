@@ -13,7 +13,11 @@ from src.game import GameState, _new_stats
 from src.config import MODE
 
 SAVE_PATH = os.path.expanduser("~/.clicker_game_save.json")
+PREFS_PATH = os.path.expanduser("~/.clicker_game_prefs.json")
 SAVE_VERSION = 2
+
+# Preferencias por defecto (la pantalla de ajustes funciona sin partida)
+DEFAULT_PREFS = {"music_vol": 0.32, "sfx_vol": 0.5, "fullscreen": False}
 
 _SCALAR_FIELDS = [
     "points", "total_points", "click_value", "click_mult",
@@ -98,5 +102,50 @@ def load_game(path: str = SAVE_PATH) -> tuple[GameState | None, dict]:
 def delete_save(path: str = SAVE_PATH) -> None:
     try:
         os.remove(path)
+    except OSError:
+        pass
+
+
+# ─── Preferencias (volumen / pantalla) independientes de la partida ──────────
+def load_prefs(path: str = PREFS_PATH) -> dict:
+    """Devuelve las preferencias, completadas con los valores por defecto.
+
+    Si no hay archivo de prefs pero sí una partida guardada, hereda de ella
+    los volúmenes/pantalla para no perder los ajustes del jugador.
+    """
+    prefs = dict(DEFAULT_PREFS)
+    data = None
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        # Respaldo solo en la ubicación real: hereda los ajustes de la partida
+        # guardada cuando aún no existe archivo de preferencias.
+        data = save_info() if path == PREFS_PATH else None
+    if isinstance(data, dict):
+        for k in DEFAULT_PREFS:
+            if k in data and data[k] is not None:
+                prefs[k] = data[k]
+    prefs["music_vol"] = max(0.0, min(1.0, float(prefs["music_vol"])))
+    prefs["sfx_vol"]   = max(0.0, min(1.0, float(prefs["sfx_vol"])))
+    prefs["fullscreen"] = bool(prefs["fullscreen"])
+    return prefs
+
+
+def save_prefs(music_vol: float | None = None, sfx_vol: float | None = None,
+               fullscreen: bool | None = None, path: str = PREFS_PATH) -> None:
+    """Persiste las preferencias (fusiona con las ya guardadas)."""
+    prefs = load_prefs(path)
+    if music_vol is not None:
+        prefs["music_vol"] = max(0.0, min(1.0, float(music_vol)))
+    if sfx_vol is not None:
+        prefs["sfx_vol"] = max(0.0, min(1.0, float(sfx_vol)))
+    if fullscreen is not None:
+        prefs["fullscreen"] = bool(fullscreen)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as fh:
+            json.dump(prefs, fh)
+        os.replace(tmp, path)
     except OSError:
         pass

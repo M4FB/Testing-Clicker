@@ -1,11 +1,3 @@
-"""Menú principal.
-
-Distribución a dos columnas:
-  • Izquierda  → título animado, identidad del proyecto y botones (alineados).
-  • Derecha    → tarjeta animada con las estadísticas de la última partida.
-Abajo, los créditos de autoría. Fondo procedural (gradiente, nebulosas,
-parallax de estrellas y textos flotantes de ambiente) heredado de fx.py.
-"""
 import math
 import random
 import sys
@@ -18,22 +10,14 @@ from src.save import has_compatible_save, save_info
 from src.fx import (
     BG, BG2, BORDER, PANEL, TXT, MUTED, ACCENT, GOLD, GREEN, ORANGE, PURPLE,
     lerp_color, scale_color, draw_text, vgradient,
-    Nebula, StarField, shiny_button, striped_bar, draw_coin, Roll,
+    Nebula, StarField, shiny_button, striped_bar, draw_coin, draw_sparkline, Roll,
 )
-from src.ui.common import fmt, fmt_time, draw_panel
-
-FONT_REG  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+from src.ui.common import fmt, fmt_time, draw_panel, font as _font, \
+    fade_in_alpha, fade_out
+from src.settings import SettingsScreen
 
 CREDITS = ("Realizado por:  2023800251 - Avendaño Marcelo (G02)"
            "     ·     2023602171 - Lipa Luis (G01)")
-
-
-def _font(size, bold=False):
-    try:
-        return pygame.font.Font(FONT_BOLD if bold else FONT_REG, size)
-    except Exception:
-        return pygame.font.SysFont("sans", size, bold=bold)
 
 
 # ── Texto flotante de ambiente (+X) ──────────────────────────────────────────
@@ -79,8 +63,9 @@ class MainMenu:
     LX   = 70                      # margen izquierdo
     PANEL = pygame.Rect(566, 96, 394, 474)   # tarjeta de estadísticas (derecha)
 
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, music: "object | None" = None):
         self.screen = screen
+        self.music  = music
         self.clock  = pygame.time.Clock()
         self.W      = screen.get_width()
         self.H      = screen.get_height()
@@ -104,15 +89,18 @@ class MainMenu:
         self._next_float = time.time()
 
         # ── Botones, alineados a la izquierda (mismo borde, misma anchura) ──
-        btn_w, btn_h, gap = 300, 56, 74
-        cy0 = 318
+        btn_w, btn_h, gap = 300, 52, 64
+        cy0 = 300
+        specs = [
+            ("NUEVA PARTIDA", "new",      True),
+            ("CONTINUAR",     "cont",     has_compatible_save()),
+            ("AJUSTES",       "settings", True),
+            ("SALIR",         "quit",     True),
+        ]
         self.buttons = [
-            {"label": "NUEVA PARTIDA", "action": "new",  "en": True,
-             "rect": pygame.Rect(self.LX, cy0,           btn_w, btn_h)},
-            {"label": "CONTINUAR",     "action": "cont", "en": has_compatible_save(),
-             "rect": pygame.Rect(self.LX, cy0 + gap,     btn_w, btn_h)},
-            {"label": "SALIR",         "action": "quit", "en": True,
-             "rect": pygame.Rect(self.LX, cy0 + gap * 2, btn_w, btn_h)},
+            {"label": lbl, "action": act, "en": en,
+             "rect": pygame.Rect(self.LX, cy0 + gap * i, btn_w, btn_h)}
+            for i, (lbl, act, en) in enumerate(specs)
         ]
 
         # ── Datos de la última partida + números rodantes (animación) ──────
@@ -121,6 +109,18 @@ class MainMenu:
         self.r_high  = Roll(0.0)
         self.r_prog  = Roll(0.0)
         self._t0 = time.time()
+        self._fade_in = time.time()
+
+    # ── Resolución de una acción de botón ─────────────────────────────────────
+    def _select(self, action: str) -> str | None:
+        """Devuelve la acción final para `run`, o None para seguir en el menú."""
+        if action == "settings":
+            SettingsScreen(self.screen, self.music).run()
+            self._fade_in = time.time()        # funde de vuelta al menú
+            return None
+        if action in ("new", "cont"):
+            fade_out(self.screen, self.clock, 0.28)
+        return action
 
     # ── Loop ──────────────────────────────────────────────────────────────────
     def run(self) -> str:
@@ -137,7 +137,7 @@ class MainMenu:
                     if event.key == pygame.K_ESCAPE:
                         return "quit"
                     if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        return "new"
+                        return self._select("new")
                     if event.key == pygame.K_F11:
                         try:
                             pygame.display.toggle_fullscreen()
@@ -146,7 +146,10 @@ class MainMenu:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     for btn in self.buttons:
                         if btn["en"] and btn["rect"].collidepoint(event.pos):
-                            return btn["action"]
+                            res = self._select(btn["action"])
+                            if res is not None:
+                                return res
+                            break
 
             if now >= self._next_float:
                 self.floats.append(_FloatText(self.W, self.H))
@@ -192,6 +195,13 @@ class MainMenu:
         strip.fill((10, 13, 22, 150))
         self.screen.blit(strip, bar.topleft)
         self.screen.blit(cred, cred.get_rect(center=(self.W // 2, self.H - 12)))
+
+        a = fade_in_alpha(self._fade_in, 0.30)
+        if a > 0:
+            veil = pygame.Surface((self.W, self.H))
+            veil.fill((0, 0, 0))
+            veil.set_alpha(a)
+            self.screen.blit(veil, (0, 0))
         pygame.display.flip()
 
     # ── Columna izquierda: título + identidad ──────────────────────────────
@@ -339,6 +349,15 @@ class MainMenu:
             self._stat_cell(x0,         y, colw, l1, v1)
             self._stat_cell(x0 + colw,  y, colw, l2, v2)
             y += 40
+
+        # Sparkline: evolución del total acumulado a lo largo de la partida
+        draw_text(self.screen, "Evolución de puntos", self.f_lbl, MUTED, x0, y, "topleft")
+        hist = st.get("history") or []
+        spark = pygame.Rect(x0, y + 16, p.width - pad * 2, 52)
+        draw_sparkline(self.screen, spark, hist, GOLD, now=now)
+        if not hist:
+            draw_text(self.screen, "(se registra al jugar)", self.f_lbl,
+                      (96, 106, 124), spark.centerx, spark.centery, "center")
 
         # Pie de la tarjeta: tiempo jugado + fecha de guardado
         y = p.bottom - pad - 16

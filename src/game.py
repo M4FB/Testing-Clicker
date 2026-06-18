@@ -16,6 +16,7 @@ def _new_stats() -> dict:
         "mini_won": 0, "mini_lost": 0,
         "mini": {},          # clave de minijuego → {"won", "lost", "best"}
         "prestiges": 0,
+        "history": [],       # muestras de total_points para el sparkline
     }
 
 

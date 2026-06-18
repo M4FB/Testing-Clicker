@@ -26,7 +26,7 @@ from src.fx import (
     Nebula, StarField, FX, Toasts, Roll,
 )
 from src.minigames import MINIGAMES
-from src.save import save_game
+from src.save import save_game, save_prefs
 from src.events import GoldenEvents, roll_outcome
 from src import achievements as ach
 from src import sfx
@@ -34,6 +34,7 @@ from src import sfx
 from src.ui.common import (
     W, H, FPS, SPLIT, PAD, STS_H,
     make_fonts, fmt, is_fullscreen, toggle_fullscreen,
+    fade_in_alpha, fade_out,
 )
 from src.ui.header import HeaderBar, draw_status_bar
 from src.ui.left_panel import LeftPanel
@@ -64,6 +65,8 @@ class GameUI:
         self.start_time = time.time() - elapsed
         self._next_autosave  = time.time() + 15.0
         self._next_ach_check = time.time() + 0.5
+        self._next_hist      = time.time() + 5.0
+        self.HIST_MAX        = 40
 
         # ── Fondo y efectos ───────────────────────────────────────────────────
         self.bg_grad  = vgradient(W, H, BG, BG2)
@@ -115,6 +118,7 @@ class GameUI:
         self.select_ovl  = MiniSelectOverlay(self)
 
         self._prev_time = time.time()
+        self._fade_in   = time.time()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Loop principal
@@ -125,6 +129,8 @@ class GameUI:
             mx, my = pygame.mouse.get_pos()
             self._handle_events(events, mx, my)
             if self._exit_to:
+                if self._exit_to == "menu":
+                    fade_out(self.screen, self.clock, 0.28)
                 return self._exit_to
             if not self.paused:
                 self._update()
@@ -204,6 +210,8 @@ class GameUI:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.paused = True
+                    if self.music:
+                        self.music.duck(0.4)      # misma música, más bajita
                     self._save()
                     self.toasts.add("Partida guardada", MUTED, 1.6)
                 elif event.key == pygame.K_SPACE:
@@ -236,27 +244,37 @@ class GameUI:
                     continue
                 self.shop.click(mx, my)
 
+    def _unpause(self):
+        self.paused = False
+        if self.music:
+            self.music.unduck()
+
     def _handle_pause_event(self, event, mx, my):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.paused = False
+                self._unpause()
             elif event.key == pygame.K_LEFT and self.music:
                 self.music.set_volume(max(0.0, self.music.get_volume() - 0.05))
+                self._save_prefs()
             elif event.key == pygame.K_RIGHT and self.music:
                 self.music.set_volume(min(1.0, self.music.get_volume() + 0.05))
+                self._save_prefs()
             elif event.key == pygame.K_UP:
                 sfx.set_volume(sfx.get_volume() + 0.05)
                 sfx.play("tick")
+                self._save_prefs()
             elif event.key == pygame.K_DOWN:
                 sfx.set_volume(sfx.get_volume() - 0.05)
                 sfx.play("tick")
+                self._save_prefs()
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             action = self.pause_ovl.click(mx, my)
             if action == "resume":
-                self.paused = False
+                self._unpause()
             elif action == "fullscreen":
                 self.toggle_fullscreen()
             elif action == "menu":
+                self._unpause()
                 self._save()
                 self._exit_to = "menu"
             elif action == "quit":
@@ -282,6 +300,14 @@ class GameUI:
         if now >= self._next_autosave:
             self._save()
             self._next_autosave = now + 30.0
+
+        # Muestreo del histórico para el sparkline del menú
+        if now >= self._next_hist:
+            self._next_hist = now + 6.0
+            hist = self.game.stats.setdefault("history", [])
+            hist.append(round(self.game.total_points, 2))
+            if len(hist) > self.HIST_MAX:
+                del hist[:-self.HIST_MAX]
 
         # Logros
         if now >= self._next_ach_check:
@@ -587,6 +613,13 @@ class GameUI:
         self.toasts.add("Pantalla completa" if full else "Modo ventana",
                         MUTED, 1.6)
 
+    def _save_prefs(self):
+        try:
+            save_prefs(music_vol=self.music.get_volume() if self.music else None,
+                       sfx_vol=sfx.get_volume(), fullscreen=is_fullscreen())
+        except OSError:
+            pass
+
     def _save(self):
         try:
             save_game(self.game,
@@ -640,6 +673,13 @@ class GameUI:
 
         self.screen.fill(BG)
         self.screen.blit(cv, self.fx.offset())
+
+        a = fade_in_alpha(self._fade_in, 0.30)
+        if a > 0:
+            veil = pygame.Surface((W, H))
+            veil.fill((0, 0, 0))
+            veil.set_alpha(a)
+            self.screen.blit(veil, (0, 0))
         pygame.display.flip()
 
 
