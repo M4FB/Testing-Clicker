@@ -20,6 +20,7 @@ GENERATORS = [
     {"id": "workshop", "name": "Taller",       "pps": 0.5,  "cost": 100,   "unlock": 50},
     {"id": "factory",  "name": "Fábrica",      "pps": 2.0,  "cost": 1100,  "unlock": 500},
     {"id": "lab",      "name": "Laboratorio",  "pps": 10.0, "cost": 12000, "unlock": 5000},
+    {"id": "research", "name": "Centro de investigación", "pps": 50.0, "cost": 130000, "unlock": 50000},
 ]
 
 # ─── Mejoras de clic (15) ─────────────────────────────────────────────────────
@@ -144,6 +145,18 @@ GEN_UPGRADES = [
     {"id": "gu_l5", "icon": "⊗", "name": "Singularidad Cient.", "target": "lab", "mult": 6.0,
      "cost": 2_000_000_000, "unlock_after": ["gu_l4"], "unlock_own": {}},
 
+    # ── Research ─────────────────────────────────────────────────────────────
+    {"id": "gu_r1", "icon": "⚛", "name": "Supercomputadora",    "target": "research", "mult": 2.0,
+     "cost": 300_000,     "unlock_after": [],       "unlock_own": {"research": 1}},
+    {"id": "gu_r2", "icon": "🌐", "name": "Fusión de Datos",     "target": "research", "mult": 2.0,
+     "cost": 3_000_000,   "unlock_after": ["gu_r1"], "unlock_own": {}},
+    {"id": "gu_r3", "icon": "📡", "name": "Satélite Científico", "target": "research", "mult": 3.0,
+     "cost": 30_000_000,  "unlock_after": ["gu_r2"], "unlock_own": {}},
+    {"id": "gu_r4", "icon": "🧠", "name": "IA General",          "target": "research", "mult": 4.0,
+     "cost": 300_000_000, "unlock_after": ["gu_r3"], "unlock_own": {}},
+    {"id": "gu_r5", "icon": "🌌", "name": "Singularidad",        "target": "research", "mult": 6.0,
+     "cost": 3_000_000_000, "unlock_after": ["gu_r4"], "unlock_own": {}},
+
     # ── Sinergia / especiales ────────────────────────────────────────────────
     {"id": "gu_sp1", "icon": "♦", "name": "Sinergia Inicial",   "target": "all", "mult": 2.0,
      "cost": 1_000,       "unlock_after": [],       "unlock_own": {"worker": 5}},
@@ -196,4 +209,13 @@ PRESTIGE_UPGRADES = [
     {"id": "pp_boost",   "icon": "∞", "name": "Eco de Boost",
      "desc": "Los boosts de minijuego duran +50%",
      "cost": 4, "effect": "boost_dur", "value": 1.5},
+    {"id": "pp_autoclick", "icon": "🖱", "name": "Auto-Clicker",
+     "desc": "1 clic automático por segundo en segundo plano",
+     "cost": 3, "effect": "autoclick_rate", "value": 1},
+    {"id": "pp_double_crit", "icon": "✦", "name": "Doble o Nada",
+     "desc": "Críticos tienen 5% de prob. de duplicarse (×50 total)",
+     "cost": 4, "effect": "double_crit_chance", "value": 0.05},
+    {"id": "pp_discount", "icon": "🏷", "name": "Descuento de Cantidad",
+     "desc": "El escalado de precios baja de 1.15 a 1.12",
+     "cost": 3, "effect": "price_discount", "value": 1.12},
 ]

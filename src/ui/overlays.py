@@ -6,7 +6,7 @@ import pygame
 
 from src.fx import (
     BORDER, TXT, MUTED, ACCENT, GOLD, GREEN, ORANGE, PURPLE,
-    lerp_color, scale_color, draw_text, shiny_button, striped_bar, draw_coin,
+    lerp_color, scale_color, draw_text, shiny_button, striped_bar, draw_coin, clamp,
 )
 from src.ui.common import W, H, fmt, fmt_time
 from src import achievements as ach
@@ -24,8 +24,9 @@ def _dim(cv, alpha=175):
 # Pausa
 # ═══════════════════════════════════════════════════════════════════════════════
 class PauseOverlay:
-    BUTTONS = [("CONTINUAR", "resume"), ("PANTALLA COMPLETA", "fullscreen"),
-               ("MENÚ PRINCIPAL", "menu"), ("SALIR DEL JUEGO", "quit")]
+    BUTTONS = [("CONTINUAR", "resume"), ("VER GRÁFICO", "stats_graph"),
+               ("PANTALLA COMPLETA", "fullscreen"), ("MENÚ PRINCIPAL", "menu"),
+               ("SALIR DEL JUEGO", "quit")]
 
     def __init__(self, ui):
         self.ui = ui
@@ -42,7 +43,7 @@ class PauseOverlay:
         _dim(cv)
         now = time.time()
 
-        pw, ph = 380, 392
+        pw, ph = 380, 444
         px, py = (W - pw) // 2, (H - ph) // 2
         panel  = pygame.Rect(px, py, pw, ph)
         pygame.draw.rect(cv, (20, 24, 34), panel, border_radius=12)
@@ -264,3 +265,99 @@ class MiniSelectOverlay:
         draw_text(cv, "ESC para volver (no pierdes el minijuego)", ui.F["xs"],
                   MUTED, px + pw // 2, py + ph - 16, "center",
                   alpha=int(150 + 105 * math.sin(now * 2.5)))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gráfico Estadístico de Producción
+# ═══════════════════════════════════════════════════════════════════════════════
+class StatsGraphOverlay:
+    def __init__(self, ui):
+        self.ui = ui
+        self.panel: pygame.Rect | None = None
+        self.back_btn: pygame.Rect | None = None
+
+    def click_outside(self, mx, my) -> bool:
+        return self.panel is not None and not self.panel.collidepoint(mx, my)
+
+    def click(self, mx, my) -> bool:
+        if self.back_btn and self.back_btn.collidepoint(mx, my):
+            return True
+        return False
+
+    def draw(self, cv, mx, my):
+        ui = self.ui
+        _dim(cv, 195)
+        now = time.time()
+
+        pw, ph = 780, 500
+        px, py = (W - pw) // 2, (H - ph) // 2
+        self.panel = pygame.Rect(px, py, pw, ph)
+        pygame.draw.rect(cv, (18, 22, 32), self.panel, border_radius=14)
+        pygame.draw.rect(cv, ACCENT, self.panel, 2, border_radius=14)
+
+        draw_text(cv, "GRÁFICO DE PRODUCCIÓN HISTÓRICA", ui.F["big"], ACCENT,
+                  px + pw // 2, py + 26, "center")
+        draw_text(cv, "Evolución de tus puntos totales acumulados", ui.F["xs"], MUTED,
+                  px + pw // 2, py + 52, "center")
+        pygame.draw.line(cv, BORDER, (px + 30, py + 68), (px + pw - 30, py + 68), 1)
+
+        # Área de dibujo del gráfico
+        gx, gy, gw, gh = px + 60, py + 90, pw - 120, ph - 170
+        pygame.draw.rect(cv, (12, 15, 23), (gx, gy, gw, gh), border_radius=6)
+        pygame.draw.rect(cv, BORDER, (gx, gy, gw, gh), 1, border_radius=6)
+
+        hist = ui.game.stats.get("history", [])
+        if len(hist) >= 2:
+            v_min = min(hist)
+            v_max = max(hist)
+            if v_max == v_min:
+                v_max += 1.0
+
+            # Líneas de cuadrícula e indicadores del eje Y
+            for i in range(4):
+                grid_y = gy + gh - i * (gh // 3)
+                pygame.draw.line(cv, (30, 36, 50), (gx, grid_y), (gx + gw, grid_y), 1)
+                val = v_min + i * ((v_max - v_min) / 3)
+                draw_text(cv, fmt(val), ui.F["xs"], MUTED, gx - 8, grid_y, "midright")
+
+            pts = []
+            for idx, val in enumerate(hist):
+                tx = gx + int(idx * (gw / (len(hist) - 1)))
+                frac = (val - v_min) / (v_max - v_min)
+                ty = gy + gh - int(frac * gh)
+                pts.append((tx, ty))
+
+            # Dibujar curva conectando los puntos
+            if len(pts) >= 2:
+                pygame.draw.lines(cv, ACCENT, False, pts, 3)
+
+            # Dibujar puntos de datos individuales
+            hovered_pt = None
+            for idx, (tx, ty) in enumerate(pts):
+                pygame.draw.circle(cv, ACCENT, (tx, ty), 4)
+                if abs(mx - tx) <= 8 and abs(my - ty) <= 8:
+                    hovered_pt = (tx, ty, hist[idx])
+
+            # Mostrar tooltip si el mouse está sobre un punto
+            if hovered_pt:
+                tx, ty, val = hovered_pt
+                pygame.draw.circle(cv, GOLD, (tx, ty), 6)
+                tw, th = 120, 30
+                tbx, tby = tx - tw // 2, ty - th - 8
+                tbx = clamp(tbx, gx, gx + gw - tw)
+                tby = clamp(tby, gy, gy + gh - th)
+                pygame.draw.rect(cv, (24, 28, 40), (tbx, tby, tw, th), border_radius=6)
+                pygame.draw.rect(cv, GOLD, (tbx, tby, tw, th), 1, border_radius=6)
+                draw_text(cv, f"Total: {fmt(val)}", ui.F["xs"], TXT,
+                          tbx + tw // 2, tby + th // 2, "center")
+        else:
+            draw_text(cv, "No hay suficientes datos históricos acumulados aún",
+                      ui.F["md"], MUTED, gx + gw // 2, gy + gh // 2, "center")
+
+        # Botón volver
+        self.back_btn = pygame.Rect(px + pw // 2 - 90, py + ph - 60, 180, 42)
+        hov = self.back_btn.collidepoint(mx, my)
+        shiny_button(cv, self.back_btn, (28, 42, 64), ACCENT if hov else BORDER,
+                     hover=hov, glow=0.8 if hov else 0.0, now=now, radius=10)
+        draw_text(cv, "← VOLVER", ui.F["btn"], (235, 243, 255) if hov else TXT,
+                  self.back_btn.centerx, self.back_btn.centery, "center")

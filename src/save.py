@@ -17,7 +17,7 @@ PREFS_PATH = os.path.expanduser("~/.clicker_game_prefs.json")
 SAVE_VERSION = 2
 
 # Preferencias por defecto (la pantalla de ajustes funciona sin partida)
-DEFAULT_PREFS = {"music_vol": 0.32, "sfx_vol": 0.5, "fullscreen": False}
+DEFAULT_PREFS = {"music_vol": 0.32, "sfx_vol": 0.5, "fullscreen": False, "theme": "azul"}
 
 _SCALAR_FIELDS = [
     "points", "total_points", "click_value", "click_mult",
@@ -129,11 +129,13 @@ def load_prefs(path: str = PREFS_PATH) -> dict:
     prefs["music_vol"] = max(0.0, min(1.0, float(prefs["music_vol"])))
     prefs["sfx_vol"]   = max(0.0, min(1.0, float(prefs["sfx_vol"])))
     prefs["fullscreen"] = bool(prefs["fullscreen"])
+    if prefs.get("theme") not in ["azul", "rojo", "verde", "cian"]:
+        prefs["theme"] = "azul"
     return prefs
 
 
 def save_prefs(music_vol: float | None = None, sfx_vol: float | None = None,
-               fullscreen: bool | None = None, path: str = PREFS_PATH) -> None:
+               fullscreen: bool | None = None, theme: str | None = None, path: str = PREFS_PATH) -> None:
     """Persiste las preferencias (fusiona con las ya guardadas)."""
     prefs = load_prefs(path)
     if music_vol is not None:
@@ -142,6 +144,8 @@ def save_prefs(music_vol: float | None = None, sfx_vol: float | None = None,
         prefs["sfx_vol"] = max(0.0, min(1.0, float(sfx_vol)))
     if fullscreen is not None:
         prefs["fullscreen"] = bool(fullscreen)
+    if theme is not None:
+        prefs["theme"] = str(theme)
     tmp = path + ".tmp"
     try:
         with open(tmp, "w") as fh:

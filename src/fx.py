@@ -32,6 +32,54 @@ RED_D   = ( 80,  25,  22)
 ORANGE  = (255, 166,  87)
 PURPLE  = (188, 140, 255)
 
+THEMES = {
+    "azul": {
+        "BG": (10, 13, 24), "BG2": (22, 15, 38), "PANEL": (21, 26, 38), "PANEL2": (30, 36, 52),
+        "BORDER": (52, 60, 78), "TXT": (212, 220, 232), "MUTED": (122, 132, 150), "ACCENT": (88, 166, 255),
+        "GOLD": (255, 200, 60), "GOLD_D": (166, 116, 20), "GREEN": (63, 185, 80), "GREEN_D": (22, 80, 35),
+        "RED": (248, 81, 73), "RED_D": (80, 25, 22), "ORANGE": (255, 166, 87), "PURPLE": (188, 140, 255)
+    },
+    "rojo": {
+        "BG": (28, 10, 10), "BG2": (48, 18, 10), "PANEL": (38, 21, 21), "PANEL2": (52, 30, 30),
+        "BORDER": (88, 52, 52), "TXT": (240, 220, 210), "MUTED": (160, 130, 120), "ACCENT": (255, 120, 50),
+        "GOLD": (255, 220, 100), "GOLD_D": (180, 140, 40), "GREEN": (100, 200, 100), "GREEN_D": (40, 100, 40),
+        "RED": (255, 70, 70), "RED_D": (100, 20, 20), "ORANGE": (255, 150, 50), "PURPLE": (255, 180, 80)
+    },
+    "verde": {
+        "BG": (5, 5, 5), "BG2": (12, 18, 12), "PANEL": (20, 22, 20), "PANEL2": (28, 34, 28),
+        "BORDER": (40, 80, 50), "TXT": (220, 255, 220), "MUTED": (110, 130, 110), "ACCENT": (50, 220, 120),
+        "GOLD": (240, 240, 50), "GOLD_D": (150, 150, 30), "GREEN": (80, 220, 80), "GREEN_D": (30, 100, 30),
+        "RED": (240, 50, 150), "RED_D": (100, 10, 50), "ORANGE": (240, 130, 50), "PURPLE": (200, 50, 200)
+    },
+    "cian": {
+        "BG": (10, 20, 28), "BG2": (15, 32, 44), "PANEL": (21, 32, 42), "PANEL2": (30, 44, 58),
+        "BORDER": (52, 72, 90), "TXT": (210, 230, 245), "MUTED": (120, 140, 150), "ACCENT": (0, 200, 220),
+        "GOLD": (255, 215, 0), "GOLD_D": (184, 134, 11), "GREEN": (72, 209, 204), "GREEN_D": (32, 178, 170),
+        "RED": (255, 99, 71), "RED_D": (178, 34, 34), "ORANGE": (255, 140, 0), "PURPLE": (120, 180, 255)
+    }
+}
+
+ACTIVE_THEME = "azul"
+
+def set_theme(theme_name: str) -> None:
+    global ACTIVE_THEME
+    if theme_name not in THEMES:
+        return
+    ACTIVE_THEME = theme_name
+    theme = THEMES[theme_name]
+    
+    # Actualizar globales de fx
+    for k, v in theme.items():
+        globals()[k] = v
+        
+    # Actualizar en todos los módulos de sys.modules
+    import sys
+    for mod_name, mod in list(sys.modules.items()):
+        if mod_name.startswith("src.") or mod_name == "src":
+            for k, v in theme.items():
+                if hasattr(mod, k):
+                    setattr(mod, k, v)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Utilidades

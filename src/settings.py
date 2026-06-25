@@ -40,19 +40,20 @@ class SettingsScreen:
         self.stars   = StarField(self.W, self.H, 90)
 
         cx = self.W // 2
-        self.panel = pygame.Rect(cx - 240, 150, 480, 320)
+        self.panel = pygame.Rect(cx - 240, 120, 480, 380)
 
         # Sliders: (clave, etiqueta, color, rect_de_pista)
         sx = self.panel.x + 150
         sw = 230
         self.sliders = {
             "music": {"label": "Música",  "color": ACCENT,
-                      "rect": pygame.Rect(sx, self.panel.y + 70,  sw, 16)},
+                      "rect": pygame.Rect(sx, self.panel.y + 60,  sw, 16)},
             "sfx":   {"label": "Sonidos", "color": PURPLE,
-                      "rect": pygame.Rect(sx, self.panel.y + 120, sw, 16)},
+                      "rect": pygame.Rect(sx, self.panel.y + 110, sw, 16)},
         }
-        self.full_rect = pygame.Rect(sx, self.panel.y + 168, 150, 34)
-        self.back_rect = pygame.Rect(cx - 90, self.panel.bottom - 56, 180, 42)
+        self.full_rect = pygame.Rect(sx, self.panel.y + 160, 150, 34)
+        self.theme_rect = pygame.Rect(sx, self.panel.y + 210, 230, 34)
+        self.back_rect = pygame.Rect(cx - 90, self.panel.bottom - 60, 180, 42)
 
         self._drag: str | None = None
         self._fade_in = time.time()
@@ -107,6 +108,8 @@ class SettingsScreen:
                         return self._leave()
                     if self.full_rect.collidepoint(mx, my):
                         self._toggle_full()
+                    if self.theme_rect.collidepoint(mx, my):
+                        self._toggle_theme()
                     for key, s in self.sliders.items():
                         if s["rect"].inflate(10, 18).collidepoint(mx, my):
                             self._drag = key
@@ -125,6 +128,15 @@ class SettingsScreen:
     def _toggle_full(self):
         full = toggle_fullscreen()
         save_prefs(fullscreen=full)
+
+    def _toggle_theme(self):
+        from src.fx import THEMES, ACTIVE_THEME, set_theme
+        themes_list = list(THEMES.keys())
+        idx = themes_list.index(ACTIVE_THEME)
+        next_theme = themes_list[(idx + 1) % len(themes_list)]
+        set_theme(next_theme)
+        save_prefs(theme=next_theme)
+        sfx.play("tick", 0.7)
 
     def _leave(self):
         fade_out(self.screen, self.clock, 0.25)
@@ -166,6 +178,23 @@ class SettingsScreen:
         draw_text(sc, "COMPLETA: ON" if full else "COMPLETA: OFF", self.f_val,
                   GREEN if full else TXT, self.full_rect.centerx,
                   self.full_rect.centery, "center")
+
+        # Toggle de tema / skin
+        from src.fx import ACTIVE_THEME
+        theme_names = {
+            "azul": "AZUL",
+            "rojo": "ROJO",
+            "verde": "VERDE",
+            "cian": "CIAN"
+        }
+        name_str = theme_names.get(ACTIVE_THEME, ACTIVE_THEME.upper())
+        hov_theme = self.theme_rect.collidepoint(mx, my)
+        draw_text(sc, "Tema", self.f_lbl, MUTED,
+                  self.theme_rect.x - 18, self.theme_rect.centery, "midright")
+        shiny_button(sc, self.theme_rect, (30, 34, 46),
+                     ACCENT if hov_theme else BORDER, hover=hov_theme, now=now, radius=9)
+        draw_text(sc, name_str, self.f_val, ACCENT, self.theme_rect.centerx,
+                  self.theme_rect.centery, "center")
 
         # Volver
         hov = self.back_rect.collidepoint(mx, my)

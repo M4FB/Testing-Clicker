@@ -367,3 +367,48 @@ def _pista_actual(ctx, name):
 @then("el volumen aplicado es menor que el de usuario")
 def _volumen_menor(ctx):
     assert ctx["mgr"]._applied() < ctx["mgr"].get_volume()
+
+
+# ── Nuevas features steps ─────────────────────────────────────────────────────
+@given(parsers.parse("el jugador alcanzó el umbral de total_points de {pts:d}"))
+def _umbral_puntos(game, pts):
+    game.total_points = float(pts * BOOST)
+
+
+@then(parsers.parse("los puntos por segundo son de al menos {pps:d}"))
+def _pps_al_menos(game, pps):
+    assert game.pps() >= float(pps)
+
+
+@given(parsers.parse('el jugador tiene la mejora de prestigio "{upg_id}" comprada'))
+def _prestige_comprada(game, upg_id):
+    from src.config import PRESTIGE_UPGRADES
+    game.prestige_upgrades[upg_id] = True
+    for u in PRESTIGE_UPGRADES:
+        if u["id"] == upg_id:
+            game._apply_prestige_effect(u)
+    if upg_id == "pp_double_crit":
+        game.double_crit_chance = 1.0
+
+
+@when(parsers.parse("transcurre {n:d} segundo de juego"))
+def _transcurre_segundo(game, n):
+    import time
+    game._last_tick = time.time() - float(n)
+    game.tick()
+
+
+@then("el total de clics registrados es mayor que cero")
+def _clics_mayor_cero(game):
+    assert game.stats["clicks"] > 0
+
+
+@given("la probabilidad de crítico es del 100%")
+def _crit_100(game):
+    game.crit_chance = 1.0
+
+
+@then(parsers.parse("el valor obtenido es {n:d} veces el clic base"))
+def _valor_clic_n(game, n):
+    base_click = game.click_value * game.click_mult * game.perm_click_mult * game._boosts()
+    assert game.points == base_click * n

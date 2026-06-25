@@ -327,10 +327,30 @@ def set_session_seed(seed: int | None = None) -> None:
         _seeds[name] = base + off * 101
 
 
+def lowpass_filter(arr: np.ndarray, window: int = 15) -> np.ndarray:
+    """Aplica un filtro de media móvil vectorizado para amortiguar frecuencias altas."""
+    float_arr = arr.astype(np.float64)
+    out = np.zeros_like(float_arr)
+    pad_left = window // 2
+    pad_right = window - 1 - pad_left
+    for col in range(2):
+        padded = np.pad(float_arr[:, col], (pad_left, pad_right), mode='edge')
+        cumsum = np.zeros(len(padded) + 1)
+        cumsum[1:] = np.cumsum(padded)
+        ma = (cumsum[window:] - cumsum[:-window]) / window
+        out[:, col] = ma
+    return np.clip(out, -32768, 32767).astype(np.int16)
+
+
 def _gen_array(name: str) -> np.ndarray:
     arr = _arr_cache.get(name)
     if arr is None:
-        arr = _GENERATORS[name](seed=_seeds.get(name))
+        if name.endswith("_muffled"):
+            base_name = name[:-8]
+            base_arr = _gen_array(base_name)
+            arr = lowpass_filter(base_arr)
+        else:
+            arr = _GENERATORS[name](seed=_seeds.get(name))
         _arr_cache[name] = arr
     return arr
 
@@ -413,10 +433,19 @@ class MusicManager:
 
     def duck(self, factor: float = 0.4) -> None:
         self._duck = max(0.0, min(1.0, factor))
-        self._apply_current()
+        if self.current and not self.current.endswith("_muffled"):
+            muffled_name = self.current + "_muffled"
+            self.play(muffled_name, fade_ms=500)
+        else:
+            self._apply_current()
 
     def unduck(self) -> None:
-        self.duck(1.0)
+        self._duck = 1.0
+        if self.current and self.current.endswith("_muffled"):
+            normal_name = self.current[:-8]
+            self.play(normal_name, fade_ms=500)
+        else:
+            self._apply_current()
 
     # ── Reproducción ─────────────────────────────────────────────────────
     def play(self, name: str, fade_ms: int = 700) -> None:

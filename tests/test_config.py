@@ -3,9 +3,9 @@ from src import config as C
 
 
 def test_generators_well_formed():
-    assert len(C.GENERATORS) == 4
+    assert len(C.GENERATORS) == 5
     ids = [g["id"] for g in C.GENERATORS]
-    assert ids == ["worker", "workshop", "factory", "lab"]
+    assert ids == ["worker", "workshop", "factory", "lab", "research"]
     for g in C.GENERATORS:
         assert {"id", "name", "pps", "cost", "unlock"} <= g.keys()
         assert g["pps"] > 0 and g["cost"] > 0
@@ -22,7 +22,7 @@ def test_click_upgrades_count_and_keys():
 
 
 def test_gen_upgrades_targets_valid():
-    assert len(C.GEN_UPGRADES) == 30
+    assert len(C.GEN_UPGRADES) == 35
     valid = {g["id"] for g in C.GENERATORS} | {"all"}
     for u in C.GEN_UPGRADES:
         assert u["target"] in valid
@@ -31,7 +31,8 @@ def test_gen_upgrades_targets_valid():
 
 def test_prestige_upgrades_effects_known():
     known = {"start_workers", "pps_mult", "click_mult",
-             "crit_chance", "golden_freq", "boost_dur"}
+             "crit_chance", "golden_freq", "boost_dur",
+             "autoclick_rate", "double_crit_chance", "price_discount"}
     for u in C.PRESTIGE_UPGRADES:
         assert u["effect"] in known
         assert u["cost"] > 0

@@ -6,8 +6,8 @@ state.achievements para que el guardado los persista.
 """
 from src.config import GENERATORS, BOOST
 
-# Claves de los 6 minijuegos (deben coincidir con MinigameBase.KEY)
-MINI_KEYS = ["rush", "rain", "simon", "pulse", "pairs", "chain"]
+# Claves de los 7 minijuegos (deben coincidir con MinigameBase.KEY)
+MINI_KEYS = ["rush", "rain", "simon", "pulse", "pairs", "chain", "type"]
 
 
 def _all_minis_won(s) -> bool:

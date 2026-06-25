@@ -41,6 +41,7 @@ from src.ui.left_panel import LeftPanel
 from src.ui.shop import ShopPanel
 from src.ui.overlays import (
     PauseOverlay, VictoryOverlay, AchievementsOverlay, MiniSelectOverlay,
+    StatsGraphOverlay,
 )
 from src.ui.qte import QTE, QTE_KEY_SET, draw_qte_panel
 from src.ui.cheats import CheatPanel
@@ -103,6 +104,7 @@ class GameUI:
         # ── Overlays / estado de navegación ───────────────────────────────────
         self.paused            = False
         self.show_achievements = False
+        self.show_stats_graph  = False
         self.victory_dismissed = False
         self._exit_to: str | None = None
 
@@ -121,6 +123,7 @@ class GameUI:
         self.victory_ovl = VictoryOverlay(self)
         self.ach_ovl     = AchievementsOverlay(self)
         self.select_ovl  = MiniSelectOverlay(self)
+        self.stats_graph_ovl = StatsGraphOverlay(self)
 
         self._prev_time = time.time()
         self._fade_in   = time.time()
@@ -172,6 +175,15 @@ class GameUI:
             if self.game.won and not self.victory_dismissed:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     self.victory_dismissed = True
+                continue
+
+            # Gráfico de estadísticas
+            if self.show_stats_graph:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.show_stats_graph = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self.stats_graph_ovl.click(mx, my) or self.stats_graph_ovl.click_outside(mx, my):
+                        self.show_stats_graph = False
                 continue
 
             # Pausa
@@ -288,6 +300,8 @@ class GameUI:
             action = self.pause_ovl.click(mx, my)
             if action == "resume":
                 self._unpause()
+            elif action == "stats_graph":
+                self.show_stats_graph = True
             elif action == "fullscreen":
                 self.toggle_fullscreen()
             elif action == "menu":
@@ -683,7 +697,9 @@ class GameUI:
             self.select_ovl.draw(cv, mx, my)
         if self.show_achievements:
             self.ach_ovl.draw(cv, mx, my)
-        if self.paused:
+        if self.show_stats_graph:
+            self.stats_graph_ovl.draw(cv, mx, my)
+        elif self.paused:
             self.pause_ovl.draw(cv, mx, my)
 
         # Cheat Table: panel encima de todo, o un pequeño distintivo si está oculta

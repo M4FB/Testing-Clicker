@@ -29,6 +29,8 @@ def main() -> None:
 
     # ── Preferencias (volúmenes / pantalla), independientes de la partida ─────
     prefs = load_prefs()
+    from src.fx import set_theme
+    set_theme(prefs.get("theme", "azul"))
     flags = pygame.SCALED
     if prefs.get("fullscreen"):
         flags |= pygame.FULLSCREEN

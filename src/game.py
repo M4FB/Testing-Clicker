@@ -51,6 +51,10 @@ class GameState:
         self.golden_freq:     float = 1.0    # factor sobre el cooldown dorado
         self.boost_dur_mult:  float = 1.0    # factor sobre duración de boosts
         self.start_workers:   int   = 0      # trabajadores tras cada prestige
+        self.autoclick_rate:  int   = 0
+        self.double_crit_chance: float = 0.0
+        self.price_scale:     float = PRICE_SCALE
+        self.autoclick_timer: float = 0.0
 
         # Minijuego (booster de PPS ×N por N segundos)
         self.minigame_active:     bool  = False
@@ -95,7 +99,10 @@ class GameState:
         earned = self.effective_click()
         crit   = random.random() < self.crit_chance
         if crit:
-            earned *= CRIT_MULT
+            mult = CRIT_MULT
+            if random.random() < self.double_crit_chance:
+                mult *= 5.0  # ×50 total
+            earned *= mult
             self.stats["crits"] += 1
         self.stats["clicks"] += 1
         self.points       += earned
@@ -128,6 +135,14 @@ class GameState:
         if self.total_points > self.high_score:
             self.high_score = self.total_points
 
+        if self.autoclick_rate > 0:
+            self.autoclick_timer += dt * self.autoclick_rate
+            clicks_to_make = int(self.autoclick_timer)
+            if clicks_to_make > 0:
+                self.autoclick_timer -= clicks_to_make
+                for _ in range(clicks_to_make):
+                    self.click()
+
         return earned
 
     # ── Producción ───────────────────────────────────────────────────────────
@@ -148,7 +163,7 @@ class GameState:
     def generator_cost(self, gen_id: str) -> int:
         base  = next(g["cost"] for g in GENERATORS if g["id"] == gen_id)
         owned = self.generators[gen_id]
-        return math.ceil(base * (PRICE_SCALE ** owned) * BOOST)
+        return math.ceil(base * (self.price_scale ** owned) * BOOST)
 
     def generator_unlocked(self, gen_id: str) -> bool:
         threshold = next(g["unlock"] for g in GENERATORS if g["id"] == gen_id)
@@ -170,7 +185,7 @@ class GameState:
         """Coste total de comprar n unidades seguidas (suma de ceils por unidad)."""
         base  = next(g["cost"] for g in GENERATORS if g["id"] == gen_id)
         owned = self.generators[gen_id]
-        return sum(math.ceil(base * (PRICE_SCALE ** (owned + i)) * BOOST)
+        return sum(math.ceil(base * (self.price_scale ** (owned + i)) * BOOST)
                    for i in range(n))
 
     def max_affordable_generators(self, gen_id: str, cap: int = 200) -> int:
@@ -182,7 +197,7 @@ class GameState:
         pts   = self.points
         cnt   = 0
         while cnt < cap:
-            c = math.ceil(base * (PRICE_SCALE ** (owned + cnt)) * BOOST)
+            c = math.ceil(base * (self.price_scale ** (owned + cnt)) * BOOST)
             if pts < c:
                 break
             pts -= c
@@ -406,6 +421,12 @@ class GameState:
             self.golden_freq = val
         elif eff == "boost_dur":
             self.boost_dur_mult = val
+        elif eff == "autoclick_rate":
+            self.autoclick_rate = val
+        elif eff == "double_crit_chance":
+            self.double_crit_chance = val
+        elif eff == "price_discount":
+            self.price_scale = val
 
     def reapply_prestige_upgrades(self):
         """Reconstruye los efectos permanentes desde prestige_upgrades.
@@ -416,6 +437,9 @@ class GameState:
         self.golden_freq     = 1.0
         self.boost_dur_mult  = 1.0
         self.start_workers   = 0
+        self.autoclick_rate  = 0
+        self.double_crit_chance = 0.0
+        self.price_scale     = PRICE_SCALE
         for upg in PRESTIGE_UPGRADES:
             if self.prestige_upgrades.get(upg["id"], False):
                 self._apply_prestige_effect(upg)

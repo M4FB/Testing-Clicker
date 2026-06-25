@@ -305,3 +305,81 @@ class TestAC16_MenuYAjustes:
         ui._next_hist = time.time() - 1
         ui._update()
         assert len(ui.game.stats["history"]) == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+class TestAC17_CentroInvestigacion:
+    """AC-17: El Centro de Investigación genera PPS de alta escala."""
+
+    def test_research_center_unlocked_and_adds_pps(self):
+        g = GameState()
+        g.points = 200000 * BOOST
+        g.total_points = 55000 * BOOST
+        assert g.generator_unlocked("research")
+        assert g.buy_generator("research")
+        assert g.pps() == pytest.approx(50.0 * BOOST)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+class TestAC18_NuevasMejorasPrestige:
+    """AC-18: Nuevas mejoras de prestigio (Auto-Clicker, Doble o Nada, Descuento)."""
+
+    def test_prestige_autoclicker_effect(self):
+        g = GameState()
+        g.autoclick_rate = 1
+        g.crit_chance = 0.0
+        g._last_tick = time.time() - 2.5
+        g.tick()
+        assert g.stats["clicks"] == 2
+
+    def test_prestige_double_crit_effect(self):
+        g = GameState()
+        g.crit_chance = 1.0
+        g.double_crit_chance = 1.0
+        earned, crit = g.click()
+        assert crit
+        assert earned == pytest.approx(g.effective_click() * 50.0)
+
+    def test_prestige_price_discount_effect(self):
+        g = GameState()
+        g.price_scale = 1.12
+        cost_discount = g.generator_cost("worker")
+        g.price_scale = 1.15
+        cost_normal = g.generator_cost("worker")
+        assert cost_discount == cost_normal  # base price remains same for 0 owned
+        # purchase one
+        g.generators["worker"] = 1
+        g.price_scale = 1.12
+        cost_discount = g.generator_cost("worker")
+        g.price_scale = 1.15
+        cost_normal = g.generator_cost("worker")
+        assert cost_discount < cost_normal
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+class TestAC19_FiltroDSPAudiovisual:
+    """AC-19: Filtro DSP de paso bajo en pausa."""
+
+    def test_lowpass_audio_active_on_duck(self):
+        from src import music as M
+        mgr = M.MusicManager(volume=0.5)
+        mgr.play("game")
+        assert mgr.current == "game"
+        # Duck triggers low-pass crossfade to muffled
+        mgr.duck(0.4)
+        assert mgr.current == "game_muffled"
+        # Unduck returns to normal
+        mgr.unduck()
+        assert mgr.current == "game"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+class TestAC20_TemasVisualesYSkins:
+    """AC-20: Cambios de tema visual y persistencia en preferencias."""
+
+    def test_theme_persists_in_prefs(self, tmp_path):
+        from src.save import load_prefs, save_prefs
+        prefs_file = str(tmp_path / "prefs.json")
+        save_prefs(theme="verde", path=prefs_file)
+        loaded = load_prefs(path=prefs_file)
+        assert loaded["theme"] == "verde"

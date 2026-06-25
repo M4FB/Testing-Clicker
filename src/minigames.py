@@ -913,4 +913,82 @@ class NumberChain(MinigameBase):
         self.draw_esc_hint(surf, F)
 
 
-MINIGAMES = [TargetRush, GoldRain, SimonPlus, PulseBar, MemoryPairs, NumberChain]
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7. SpeedTypist (mecanógrafo veloz)
+# ═══════════════════════════════════════════════════════════════════════════════
+class SpeedTypist(MinigameBase):
+    KEY      = "type"
+    TITLE    = "Mecanógrafo Veloz"
+    HINT     = "Escribe la palabra antes de que expire el tiempo"
+    COLOR    = (230, 80, 180)  # Rosa / Magenta
+    DURATION = 8.0
+
+    _WORDS = ["CLICKER", "MEJORA", "PRESTIGIO", "FABRICA", "CIENCIA",
+              "QUANTUM", "VELOCIDAD", "LOGRO", "PARTICULA", "AUTOMATICO"]
+
+    def __init__(self, rect: pygame.Rect, fx):
+        super().__init__(rect, fx)
+        # Selecciona una palabra al azar
+        self.target_word = random.choice(self._WORDS)
+        self.typed_word  = ""
+
+    def score_value(self) -> float:
+        return float(len(self.typed_word))
+
+    def event(self, e, mx, my):
+        if self.finished:
+            return
+        if e.type == pygame.KEYDOWN:
+            char = e.unicode.upper()
+            if char.isalpha() and len(char) == 1:
+                # Comprobar la siguiente letra esperada
+                expected_char = self.target_word[len(self.typed_word)]
+                if char == expected_char:
+                    self.typed_word += char
+                    from src import sfx
+                    sfx.play("click")
+                    if self.typed_word == self.target_word:
+                        sfx.play("win")
+                        self.finish((2.0, 30.0), "¡Excelente! Multiplicador ×2 activado", GREEN)
+                else:
+                    from src import sfx
+                    sfx.play("error")
+                    self.typed_word = ""  # Penalización: reinicia la palabra
+
+    def update(self, now, dt):
+        if self.finished:
+            return
+        if now - self.start >= self.DURATION:
+            from src import sfx
+            sfx.play("fail")
+            self.finish(None, f"Tiempo agotado. La palabra era: {self.target_word}", RED)
+
+    def draw(self, surf, F, mx, my):
+        self.draw_frame(surf, F)
+        now = time.time()
+        self.draw_timer(surf, now)
+
+        r = self.rect
+        cx, cy = r.centerx, r.centery
+
+        # Renderizar la palabra con las letras escritas en verde
+        font = F["big"]
+        w_typed = font.size(self.typed_word)[0]
+        w_all = font.size(self.target_word)[0]
+
+        x_start = cx - w_all // 2
+
+        # Parte completada (Verde)
+        draw_text(surf, self.typed_word, font, GREEN, x_start, cy - 10, "topleft")
+        # Parte restante (Gris/Muted)
+        untyped_part = self.target_word[len(self.typed_word):]
+        draw_text(surf, untyped_part, font, MUTED, x_start + w_typed, cy - 10, "topleft")
+
+        # Pistas
+        draw_text(surf, "Usa tu teclado real para escribir", F["xs"], MUTED, cx, cy + 40, "center")
+
+        self.draw_result(surf, F)
+        self.draw_esc_hint(surf, F)
+
+
+MINIGAMES = [TargetRush, GoldRain, SimonPlus, PulseBar, MemoryPairs, NumberChain, SpeedTypist]
