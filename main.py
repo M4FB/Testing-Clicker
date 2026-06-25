@@ -3,11 +3,13 @@
 Clicker Game — versión principal (v1.0).
 
 Uso (desde la raíz del repo):
-    .venv/bin/python main.py                  # modo demo (×100)
-    GAME_MODE=full .venv/bin/python main.py   # modo full
+    .venv/bin/python main.py                       # modo demo (×100)
+    GAME_MODE=full .venv/bin/python main.py        # modo full
+    CHEAT_TABLE=on .venv/bin/python main.py        # con mesa de trucos (F1)
 
 F11 alterna pantalla completa (la ventana usa SCALED, así que el lienzo
-de 1024×680 se escala solo).
+de 1024×680 se escala solo). Con CHEAT_TABLE=on, F1 abre dentro del juego una
+"Cheat Table" para forzar minijuegos, stats, mejoras, prestigio y endgame.
 """
 import sys
 

@@ -18,7 +18,7 @@ import pygame
 from src.game import GameState
 from src.config import (
     GENERATORS, CLICK_UPGRADES, GEN_UPGRADES, PRESTIGE_UPGRADES,
-    MODE, MINIGAME_COOLDOWN, QTE_COOLDOWN, BOOST, MINI_SELECT_WINS,
+    MODE, MINIGAME_COOLDOWN, QTE_COOLDOWN, BOOST, MINI_SELECT_WINS, CHEATS,
 )
 from src.fx import (
     BG, BG2, MUTED, GOLD, GREEN, RED, ORANGE, PURPLE,
@@ -43,6 +43,7 @@ from src.ui.overlays import (
     PauseOverlay, VictoryOverlay, AchievementsOverlay, MiniSelectOverlay,
 )
 from src.ui.qte import QTE, QTE_KEY_SET, draw_qte_panel
+from src.ui.cheats import CheatPanel
 
 
 class GameUI:
@@ -105,6 +106,10 @@ class GameUI:
         self.victory_dismissed = False
         self._exit_to: str | None = None
 
+        # ── Cheat Table (solo si CHEAT_TABLE=on) ──────────────────────────────
+        self.cheats_open  = False
+        self.cheat_panel  = CheatPanel(self) if CHEATS else None
+
         # ── Compra múltiple ───────────────────────────────────────────────────
         self.buy_qty: int | str = 1          # 1 | 10 | "max"
 
@@ -150,6 +155,18 @@ class GameUI:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
                 self.toggle_fullscreen()
                 continue
+
+            # Cheat Table (F1): solo si CHEAT_TABLE=on
+            if self.cheat_panel is not None:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
+                    self.cheats_open = not self.cheats_open
+                    continue
+                if self.cheats_open:
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        self.cheats_open = False
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        self.cheat_panel.click(mx, my)
+                    continue
 
             # Victoria: clic para cerrar overlay
             if self.game.won and not self.victory_dismissed:
@@ -668,6 +685,13 @@ class GameUI:
             self.ach_ovl.draw(cv, mx, my)
         if self.paused:
             self.pause_ovl.draw(cv, mx, my)
+
+        # Cheat Table: panel encima de todo, o un pequeño distintivo si está oculta
+        if self.cheat_panel is not None:
+            if self.cheats_open:
+                self.cheat_panel.draw(cv, mx, my)
+            else:
+                draw_text(cv, "⚙ CHEATS · F1", self.F["xs"], RED, 8, 54)
 
         self.toasts.draw(cv, self.F["sm"], PAD, H - STS_H - 6)
 

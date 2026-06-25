@@ -1,7 +1,5 @@
 """Pruebas BDD (Behaviour Driven Development) — pytest-bdd.
-
 Carga los escenarios Gherkin de tests/features/*.feature; los step
-definitions (en español) viven en tests/conftest.py.
 """
 from pytest_bdd import scenarios
 

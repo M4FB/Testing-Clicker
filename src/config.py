@@ -3,6 +3,11 @@ import os
 MODE  = os.environ.get("GAME_MODE", "demo").lower()
 BOOST = 100 if MODE == "demo" else 1
 
+# Mesa de trucos (estilo Cheat Engine): se activa igual que el modo, con una
+# variable de entorno → CHEAT_TABLE=on. Abre un panel in-game (tecla F1) para
+# forzar minijuegos, stats, mejoras, prestigio y endgame. Solo para depurar/demostrar.
+CHEATS = os.environ.get("CHEAT_TABLE", "off").lower() in ("on", "1", "true", "yes")
+
 BASE_CLICK_VALUE = 1
 PRICE_SCALE      = 1.15
 
